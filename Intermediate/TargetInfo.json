@@ -1,0 +1,14 @@
+{
+	"Targets": [
+		{
+			"Name": "AnabiosisOrigin",
+			"Path": "..\\Source\\AnabiosisOrigin.Target.cs",
+			"Type": "Game"
+		},
+		{
+			"Name": "AnabiosisOriginEditor",
+			"Path": "..\\Source\\AnabiosisOriginEditor.Target.cs",
+			"Type": "Editor"
+		}
+	]
+}

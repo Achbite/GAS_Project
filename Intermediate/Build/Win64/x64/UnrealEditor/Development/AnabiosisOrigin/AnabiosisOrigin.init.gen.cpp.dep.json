@@ -1,0 +1,13 @@
+{
+    "Version": "1.2",
+    "Data": {
+        "Source": "c:\\users\\administrator\\desktop\\anabiosisorigin\\intermediate\\build\\win64\\unrealeditor\\inc\\anabiosisorigin\\uht\\anabiosisorigin.init.gen.cpp",
+        "ProvidedModule": "",
+        "PCH": "c:\\users\\administrator\\desktop\\anabiosisorigin\\intermediate\\build\\win64\\x64\\anabiosisorigineditor\\development\\unrealed\\sharedpch.unrealed.project.valapi.cpp20.h.pch",
+        "Includes": [
+            "c:\\users\\administrator\\desktop\\anabiosisorigin\\intermediate\\build\\win64\\x64\\unrealeditor\\development\\anabiosisorigin\\definitions.anabiosisorigin.h"
+        ],
+        "ImportedModules": [],
+        "ImportedHeaderUnits": []
+    }
+}
