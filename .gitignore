@@ -32,6 +32,10 @@ DerivedDataCache/
 # 非必须的大型资源文件
 Content/StarterContent/
 Content/Collections/
+/DerivedDataCache
+/Intermediate
+/Saved
+/.vscode
 
 # 日志文件
 *.log
