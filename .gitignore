@@ -1,0 +1,41 @@
+# 文件路径: c:\Users\Administrator\Desktop\AnabiosisOrigin\.gitignore
+# Unreal Engine 生成的文件
+Binaries/
+Build/
+Debug/
+Intermediate/
+Saved/
+DerivedDataCache/
+
+# Visual Studio 文件
+.vs/
+*.opensdf
+*.sdf
+*.suo
+*.VC.db
+*.VC.opendb
+*.user
+*.ncb
+*.idb
+*.pdb
+
+# 编译器生成的文件
+*.obj
+*.exe
+*.dll
+*.lib
+*.a
+*.so
+*.dylib
+*.pch
+
+# 非必须的大型资源文件
+Content/StarterContent/
+Content/Collections/
+
+# 日志文件
+*.log
+
+# 操作系统生成的文件
+.DS_Store
+Thumbs.db
