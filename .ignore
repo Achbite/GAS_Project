@@ -1,4 +1,10 @@
+/.git
 /.vscode
+/Content
 /DerivedDataCache
 /Intermediate
 /Saved
+/Plugins/UnLua/Content
+/Plugins/UnLuaExtensions/LuaProtobuf/Content
+/Plugins/UnLuaExtensions/LuaSocket/Content
+/Plugins/UnLuaTestSuite/Content
