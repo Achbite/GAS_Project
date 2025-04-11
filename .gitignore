@@ -36,6 +36,7 @@ Content/Collections/
 /Intermediate
 /Saved
 /.vscode
+/Config
 
 # 日志文件
 *.log
