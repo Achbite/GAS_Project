@@ -72,7 +72,7 @@ void AAnabiosisPlayerController::SetupInputComponent()
         EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &AAnabiosisPlayerController::StopJumping);
         
         // 绑定攻击输入
-        EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &AAnabiosisPlayerController::OnAttackActionStarted);
+        //EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &AAnabiosisPlayerController::OnAttackActionStarted);
         
         // 绑定攻击视角切换
         EnhancedInputComponent->BindAction(AttackLookAction, ETriggerEvent::Started, this, &AAnabiosisPlayerController::ToggleAttackLook);
