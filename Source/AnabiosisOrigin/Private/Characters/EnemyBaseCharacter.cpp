@@ -36,6 +36,8 @@
 #include "Engine/DamageEvents.h"    // Include DamageEvents for TakeDamage override
 #include "Components/SkeletalMeshComponent.h" // 包含骨骼网格体组件头文件
 #include "Animation/AnimInstance.h" // Include for AnimInstance
+#include "AI/AiBehaviorComponent.h" // 包含 AI 行为组件以便查找
+#include "AI/EnemyAIController.h"   // 包含 AI 控制器以便通知 (如果需要)
 
 #define COLLISION_ENEMY ECC_GameTraceChannel1
 
@@ -59,6 +61,10 @@ AEnemyBaseCharacter::AEnemyBaseCharacter()
 
     // 创建属性集
     AttributeSet = CreateDefaultSubobject<UEnemyAttributeSet>(TEXT("AttributeSet"));
+
+    // --- 创建 AI 行为组件 ---
+    AiBehaviorComponent = CreateDefaultSubobject<UAiBehaviorComponent>(TEXT("AiBehaviorComponent"));
+    // -----------------------
 
     // 设置胶囊体碰撞
     UCapsuleComponent* Capsule = GetCapsuleComponent();
@@ -207,6 +213,19 @@ void AEnemyBaseCharacter::InitializeAttributesFromDataTable()
     // 保留初始化完成日志
     UE_LOG(LogTemp, Log, TEXT("Enemy %s initialized attributes and montages from DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
 
+    // --- 初始化 AI 行为组件 ---
+    if (AiBehaviorComponent)
+    {
+        // 确保在属性加载后调用 InitializeBehavior
+        AiBehaviorComponent->InitializeBehavior(this, *Row); // 传递自身指针和加载的数据行
+        UE_LOG(LogTemp, Log, TEXT("Enemy %s initialized AiBehaviorComponent."), *GetName());
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("EnemyBaseCharacter %s: AiBehaviorComponent is NULL! Cannot initialize AI behavior."), *GetName());
+    }
+    // --------------------------
+
     // 应用其他从数据表读取的配置，例如 AI 参数 (如果需要)
     // GetCharacterMovement()->MaxWalkSpeed = ... Row->MovementSpeed ... (如果数据表中有)
 }
@@ -226,6 +245,13 @@ UAbilitySystemComponent* AEnemyBaseCharacter::GetAbilitySystemComponent() const
 {
     return AbilitySystemComponent;
 }
+
+// --- 实现 GetAttributeSet ---
+UEnemyAttributeSet* AEnemyBaseCharacter::GetAttributeSet() const
+{
+	return AttributeSet;
+}
+// --------------------------
 
 UAnimMontage* AEnemyBaseCharacter::GetHitReactionMontage() const
 {
@@ -290,8 +316,11 @@ void AEnemyBaseCharacter::HandleDeath()
 		return;
 	}
 	bIsDead = true;
-	// 保留死亡处理开始日志
 	UE_LOG(LogTemp, Log, TEXT("EnemyBaseCharacter %s is handling death."), *GetName());
+
+	// --- 广播死亡委托 ---
+	OnDeathDelegate.Broadcast();
+	// --------------------
 
 	// 停止移动
 	if (GetCharacterMovement())

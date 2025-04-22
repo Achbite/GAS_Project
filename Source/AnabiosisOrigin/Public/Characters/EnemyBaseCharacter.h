@@ -51,6 +51,10 @@
 
 class UAbilitySystemComponent;
 class UAnimMontage; // Forward declare UAnimMontage
+class UAiBehaviorComponent; // 前向声明
+
+// 声明死亡委托
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnDeathDelegate);
 
 UCLASS()
 class ANABIOSISORIGIN_API AEnemyBaseCharacter : public ACharacter, public IAbilitySystemInterface
@@ -64,9 +68,17 @@ public:
     virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
     //~ End IAbilitySystemInterface
 
+    /** 获取敌人的属性集 */
+    UFUNCTION(BlueprintPure, Category = "Abilities")
+    UEnemyAttributeSet* GetAttributeSet() const; // <--- 添加 Getter
+
     /** 获取从数据表加载的受击蒙太奇 */
     UFUNCTION(BlueprintPure, Category = "Animation")
     UAnimMontage* GetHitReactionMontage() const;
+
+    /** 角色死亡时广播的委托 */
+    UPROPERTY(BlueprintAssignable, Category = "Character|State")
+    FOnDeathDelegate OnDeathDelegate;
 
     //~ Begin AActor Interface
     /** 重写 TakeDamage 以便与 GAS 属性交互 */
@@ -90,6 +102,10 @@ protected:
 
     UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Abilities", meta = (AllowPrivateAccess = "true")) // VisibleDefaultsOnly 可能更合适
     TObjectPtr<UEnemyAttributeSet> AttributeSet; // 敌人属性集
+
+    // --- AI Component --- // <--- 添加 AI 组件部分
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AI", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UAiBehaviorComponent> AiBehaviorComponent; // AI 行为组件
 
     // --- GAS Initialization ---
     /** 默认赋予的能力列表 */
