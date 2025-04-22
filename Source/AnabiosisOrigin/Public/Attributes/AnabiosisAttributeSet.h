@@ -4,7 +4,7 @@
  * This program is free software: you can redistribute it and/or modify 
  * it under the terms of the GNU General Public License as published by 
  * the Free Software Foundation, either version 3 of the License, or 
- * (at your option) any later version. 
+ * (at any later version. 
  * 
  * This program is distributed in the hope that it will be useful, 
  * but WITHOUT ANY WARRANTY; without even the implied warranty of 
@@ -17,15 +17,7 @@
  
 /*
 * 文件名: AnabiosisAttributeSet.h
-* 功能描述：
-* - 定义角色基础属性系统
-* - 提供属性计算和修改接口
-* - 管理属性同步和复制
-*
-* 属性系统：
-* - 基础属性：力量、敏捷、体质等
-* - 衍生属性：攻击力、移动速度等
-* - 状态属性：生命值、魔法值等
+* 功能描述： 定义玩家角色的属性集 (AttributeSet)。包含基础属性、状态属性和战斗属性。
 */
 
 #pragma once
@@ -35,62 +27,80 @@
 #include "AbilitySystemComponent.h"
 #include "AnabiosisAttributeSet.generated.h"
 
-// 使用宏来定义属性的Getter和Setter
+// 定义属性访问器宏
 #define ATTRIBUTE_ACCESSORS(ClassName, PropertyName) \
-    GAMEPLAYATTRIBUTE_PROPERTY_GETTER(ClassName, PropertyName) \
-    GAMEPLAYATTRIBUTE_VALUE_GETTER(PropertyName) \
-    GAMEPLAYATTRIBUTE_VALUE_SETTER(PropertyName) \
-    GAMEPLAYATTRIBUTE_VALUE_INITTER(PropertyName)
+	GAMEPLAYATTRIBUTE_PROPERTY_GETTER(ClassName, PropertyName) \
+	GAMEPLAYATTRIBUTE_VALUE_GETTER(PropertyName) \
+	GAMEPLAYATTRIBUTE_VALUE_SETTER(PropertyName) \
+	GAMEPLAYATTRIBUTE_VALUE_INITTER(PropertyName)
 
 UCLASS()
 class ANABIOSISORIGIN_API UAnabiosisAttributeSet : public UAttributeSet
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 public:
-    UAnabiosisAttributeSet();
+	UAnabiosisAttributeSet();
 
-    // 基础属性
-    UPROPERTY(BlueprintReadOnly, Category = "Attributes|Base")
-    FGameplayAttributeData Strength;
-    ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Strength)
+	// --- 基础属性 ---
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Base")
+	FGameplayAttributeData Strength; // 力量
+	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Strength)
 
-    UPROPERTY(BlueprintReadOnly, Category = "Attributes|Base")
-    FGameplayAttributeData Agility;
-    ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Agility)
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Base")
+	FGameplayAttributeData Agility; // 敏捷
+	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Agility)
 
-    UPROPERTY(BlueprintReadOnly, Category = "Attributes|Base")
-    FGameplayAttributeData Constitution;
-    ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Constitution)
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Base")
+	FGameplayAttributeData Constitution; // 体质
+	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Constitution)
 
-    // 衍生属性
-    UPROPERTY(BlueprintReadOnly, Category = "Attributes|Derived")
-    FGameplayAttributeData AttackPower;
-    ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, AttackPower)
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Base")
+	FGameplayAttributeData Intelligence; // 智力
+	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Intelligence)
 
-    UPROPERTY(BlueprintReadOnly, Category = "Attributes|Derived")
-    FGameplayAttributeData MovementSpeed;
-    ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, MovementSpeed)
+	// --- 状态属性 ---
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Status")
+	FGameplayAttributeData Health; // 当前生命值
+	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Health)
 
-    // 状态属性
-    UPROPERTY(BlueprintReadOnly, Category = "Attributes|Status")
-    FGameplayAttributeData Health;
-    ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Health)
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Status")
+	FGameplayAttributeData MaxHealth; // 最大生命值
+	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, MaxHealth)
 
-    UPROPERTY(BlueprintReadOnly, Category = "Attributes|Status")
-    FGameplayAttributeData MaxHealth;
-    ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, MaxHealth)
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Status")
+	FGameplayAttributeData Mana; // 当前法力值
+	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Mana)
 
-    // 属性变化前的回调
-    virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
-    
-    // 属性基值变化时的回调
-    virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Status")
+	FGameplayAttributeData MaxMana; // 最大法力值
+	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, MaxMana)
 
-    // 属性初始化
-    virtual void InitFromMetaDataTable(const UDataTable* DataTable);
+	// --- 战斗属性 ---
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat")
+	FGameplayAttributeData AttackPower; // 攻击力
+	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, AttackPower)
+
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat")
+	FGameplayAttributeData Defense; // 防御力
+	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Defense)
+
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat")
+	FGameplayAttributeData CriticalChance; // 暴击率
+	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, CriticalChance)
+
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat")
+	FGameplayAttributeData CriticalMultiplier; // 暴击倍率
+	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, CriticalMultiplier)
+
+	//~ Begin UAttributeSet Interface
+	/** 在属性值改变生效前调用，用于 Clamp 或调整 */
+	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
+	/** 在 GameplayEffect 执行后调用，用于 Clamp 当前值 */
+	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
+	//~ End UAttributeSet Interface
 
 protected:
-    // 属性值合法性检查
-    void AdjustAttributeForMaxChange(FGameplayAttributeData& AffectedAttribute, const FGameplayAttributeData& MaxAttribute, float NewMaxValue);
+	/** 当最大值属性改变时，调整相关当前值属性 */
+	void AdjustAttributeForMaxChange(FGameplayAttributeData& AffectedAttribute, const FGameplayAttributeData& MaxAttribute, float NewMaxValue, const FGameplayAttribute& AffectedAttributeProperty);
 };

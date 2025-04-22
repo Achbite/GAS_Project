@@ -17,10 +17,8 @@
  
 /*
 * 文件名: AnabiosisAttributeData.h
-* 功能描述：
-* - 定义所有玩家属性数据结构
-* - 提供数据表格式支持
-* - 实现玩家属性的可视化配置
+* 功能描述： 定义玩家属性数据表 (DataTable) 的行结构 (FAnabiosisAttributeData)。
+*            包含玩家职业、等级、基础属性、战斗属性及成长相关系数。
 */
 
 #pragma once
@@ -30,113 +28,91 @@
 #include "AnabiosisAttributeData.generated.h"
 
 /**
- * 玩家职业类型
+ * 玩家职业枚举
  */
 UENUM(BlueprintType)
 enum class EAnabiosisPlayerClass : uint8
 {
-    Warrior     UMETA(DisplayName = "战士"),
-    Assassin    UMETA(DisplayName = "刺客"),
-    Mage        UMETA(DisplayName = "法师")
+	Warrior     UMETA(DisplayName = "战士"),
+	Assassin    UMETA(DisplayName = "刺客"),
+	Mage        UMETA(DisplayName = "法师")
 };
 
 /**
- * 游戏玩家的所有属性数据
+ * 玩家属性数据行结构
  */
 USTRUCT(BlueprintType)
 struct FAnabiosisAttributeData : public FTableRowBase
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
-    // 基本信息
-    /** 职业类型 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic")
-    EAnabiosisPlayerClass PlayerClass = EAnabiosisPlayerClass::Warrior;
+	// --- 基本信息 ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic")
+	EAnabiosisPlayerClass PlayerClass = EAnabiosisPlayerClass::Warrior; // 玩家职业
 
-    /** 角色等级 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic", meta = (ClampMin = "1", ClampMax = "99"))
-    int32 Level = 1;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Basic", meta = (ClampMin = "1", ClampMax = "99"))
+	int32 Level = 1; // 等级
 
-    // 基础属性
-    /** 力量：影响基础攻击力 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Primary Attributes", meta = (ClampMin = "1"))
-    float Strength = 10.0f;
+	// --- 基础属性 ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Primary Attributes", meta = (ClampMin = "1"))
+	float Strength = 10.0f; // 力量
 
-    /** 敏捷：影响移动速度和闪避 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Primary Attributes", meta = (ClampMin = "1"))
-    float Agility = 10.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Primary Attributes", meta = (ClampMin = "1"))
+	float Agility = 10.0f; // 敏捷
 
-    /** 体质：影响生命值和防御 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Primary Attributes", meta = (ClampMin = "1"))
-    float Constitution = 10.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Primary Attributes", meta = (ClampMin = "1"))
+	float Constitution = 10.0f; // 体质
 
-    /** 智力：影响技能伤害和魔法值 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Primary Attributes", meta = (ClampMin = "1"))
-    float Intelligence = 10.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Primary Attributes", meta = (ClampMin = "1"))
+	float Intelligence = 10.0f; // 智力
 
-    // 战斗属性
-    /** 生命值 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
-    float Health = 100.0f;
+	// --- 战斗属性 (通常是初始值或基础值) ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
+	float Health = 100.0f; // 当前生命值
 
-    /** 最大生命值 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
-    float MaxHealth = 100.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
+	float MaxHealth = 100.0f; // 最大生命值
 
-    /** 魔法值 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
-    float Mana = 100.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
+	float Mana = 100.0f; // 当前法力值
 
-    /** 最大魔法值 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
-    float MaxMana = 100.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
+	float MaxMana = 100.0f; // 最大法力值
 
-    /** 攻击力 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
-    float AttackPower = 10.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
+	float AttackPower = 10.0f; // 攻击力
 
-    /** 防御力 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
-    float Defense = 5.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
+	float Defense = 5.0f; // 防御力
 
-    /** 暴击率 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0", ClampMax = "1"))
-    float CriticalChance = 0.05f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0.0", ClampMax = "1.0")) // ClampMax 设为 1.0
+	float CriticalChance = 0.05f; // 暴击率
 
-    /** 暴击伤害倍率 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "1"))
-    float CriticalMultiplier = 1.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "1.0")) // 暴击倍率至少为 1
+	float CriticalMultiplier = 1.5f; // 暴击倍率
 
-    // 衍生属性系数
-    /** 每点力量提供的攻击力 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Coefficients", meta = (ClampMin = "0"))
-    float AttackPowerPerStrength = 2.0f;
+	// --- 衍生属性系数 (可选，如果属性计算在 GE 中处理，则可能不需要) ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Coefficients", meta = (ClampMin = "0"))
+	float AttackPowerPerStrength = 2.0f; // 每点力量增加的攻击力
 
-    /** 每点敏捷提供的移动速度 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Coefficients", meta = (ClampMin = "0"))
-    float MovementSpeedPerAgility = 0.5f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Coefficients", meta = (ClampMin = "0"))
+	float MovementSpeedPerAgility = 0.5f; // 每点敏捷增加的移动速度 (注意：移动速度通常不由 AttributeSet 直接管理)
 
-    /** 每点体质提供的生命值 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Coefficients", meta = (ClampMin = "0"))
-    float HealthPerConstitution = 10.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Coefficients", meta = (ClampMin = "0"))
+	float HealthPerConstitution = 10.0f; // 每点体质增加的生命值
 
-    /** 每点智力提供的魔法值 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Coefficients", meta = (ClampMin = "0"))
-    float ManaPerIntelligence = 10.0f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Coefficients", meta = (ClampMin = "0"))
+	float ManaPerIntelligence = 10.0f; // 每点智力增加的法力值
 
-    // 成长属性
-    /** 等级提升时基础属性成长率 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth", meta = (ClampMin = "1.0"))
-    float AttributeGrowthRate = 1.1f;
+	// --- 成长属性 (可选，升级逻辑可以在其他地方处理) ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth", meta = (ClampMin = "1.0"))
+	float AttributeGrowthRate = 1.1f; // 基础属性成长率
 
-    /** 等级提升时生命值成长率 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth", meta = (ClampMin = "1.0"))
-    float HealthGrowthRate = 1.2f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth", meta = (ClampMin = "1.0"))
+	float HealthGrowthRate = 1.2f; // 生命值成长率
 
-    /** 等级提升时魔法值成长率 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth", meta = (ClampMin = "1.0"))
-    float ManaGrowthRate = 1.15f;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth", meta = (ClampMin = "1.0"))
+	float ManaGrowthRate = 1.15f; // 法力值成长率
 
-    FAnabiosisAttributeData()
-    {}
+	FAnabiosisAttributeData() = default; // 使用默认构造函数
 };

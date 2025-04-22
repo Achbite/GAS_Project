@@ -15,110 +15,120 @@
  * along with this program.  If not, see https://www.gnu.org/licenses/. 
  */ 
 
+/*
+* 文件名: AnabiosisOriginCharacter.h
+* 功能描述： 游戏主角色类定义。包含相机、GAS 组件、属性集，并处理输入、职业切换和属性加载。
+*/
+
 #pragma once
 
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "AbilitySystemInterface.h"
 #include "GameplayEffectTypes.h"
-#include "AbilitySystemComponent.h"
-#include "GameplayAbilitySpec.h"
+#include "Abilities/GameplayAbility.h"
+#include "Engine/DataTable.h"
 #include "Data/AnabiosisAttributeData.h"
+#include "Animation/AnimMontage.h"
 #include "AnabiosisOriginCharacter.generated.h"
 
 class USpringArmComponent;
 class UCameraComponent;
 class UAttributeSet;
+class UAbilitySystemComponent;
 
-/**
- * 游戏主角色类
- * 实现基础移动、视角和能力系统
- */
 UCLASS(config=Game)
 class AAnabiosisOriginCharacter : public ACharacter, public IAbilitySystemInterface
 {
-    GENERATED_BODY()
+	GENERATED_BODY()
 
 private:
-    /** 相机臂组件：控制相机跟随距离和位置 */
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
-    USpringArmComponent* CameraBoom;
+	/** 相机臂组件 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<USpringArmComponent> CameraBoom; // 相机臂
 
-    /** 跟随相机：实现第三人称视角 */
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
-    UCameraComponent* FollowCamera;
+	/** 跟随相机 */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UCameraComponent> FollowCamera; // 跟随相机
 
 protected:
-    /** GAS系统组件 */
-    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Abilities")
-    UAbilitySystemComponent* AbilitySystemComponent;
+	// --- GAS Components ---
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Abilities", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent; // 能力系统组件
 
-    /** 属性集 */
-    UPROPERTY()
-    UAttributeSet* AttributeSet;
+	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Abilities", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UAttributeSet> AttributeSet; // 属性集 (基类指针)
 
-    /** 攻击能力标签 */
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Abilities")
-    FGameplayTag AttackAbilityTag;
+	// --- GAS Initialization & State ---
+	/** 攻击能力标签 (用于触发特定攻击能力) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Abilities")
+	FGameplayTag AttackAbilityTag; // 攻击能力标签
 
-    /** 默认能力列表 */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Abilities")
-    TArray<TSubclassOf<UGameplayAbility>> DefaultAbilities;
+	/** 默认赋予的能力列表 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities")
+	TArray<TSubclassOf<UGameplayAbility>> DefaultAbilities; // 默认能力列表
 
-    /** 属性数据表引用 */
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character|Class")
-    UDataTable* ClassAttributeTable;
+	// --- Attribute Data Loading ---
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Config|Attributes")
+	TObjectPtr<UDataTable> AttributeDataTable; // 属性数据表
 
-    /** 当前角色职业 */
-    UPROPERTY(ReplicatedUsing = OnRep_CurrentClass, EditAnywhere, BlueprintReadWrite, Category = "Character|Class")
-    EAnabiosisPlayerClass CurrentClass;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Config|Attributes")
+	FName AttributeDataRowName; // 属性数据表行名
+
+	// --- Character State ---
+	/** 当前角色职业 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character|Class")
+	EAnabiosisPlayerClass CurrentClass; // 当前职业
+
+	/** 受击时播放的动画蒙太奇 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character|Animation")
+	TObjectPtr<UAnimMontage> HitReactionMontage; // 受击反应蒙太奇
 
 public:
-    /** 构造函数 */
-    AAnabiosisOriginCharacter();
+	AAnabiosisOriginCharacter();
 
-    /** 获取能力系统组件 */
-    virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	//~ Begin IAbilitySystemInterface
+	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+	//~ End IAbilitySystemInterface
 
-    /** 获取攻击能力标签 */
-    UFUNCTION(BlueprintCallable, Category = "Abilities")
-    FGameplayTag GetAttackAbilityTag() const { return AttackAbilityTag; }
-    
-    /** 设置攻击能力标签 */
-    UFUNCTION(BlueprintCallable, Category = "Abilities")
-    void SetAttackAbilityTag(const FGameplayTag& NewTag);
-    
-    /** 获取相机组件 */
-    FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
-    FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
+	// --- Getters ---
+	UFUNCTION(BlueprintCallable, Category = "Abilities")
+	FGameplayTag GetAttackAbilityTag() const { return AttackAbilityTag; }
+	
+	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
+	FORCEINLINE UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
-    /** 设置角色旋转模式 */
-    void SetCharacterRotationMode(bool bOrientToMovement, bool bUseControllerRotation);
+	UFUNCTION(BlueprintPure, Category = "Character|Class")
+	EAnabiosisPlayerClass GetPlayerClass() const { return CurrentClass; }
 
-    /** 设置角色职业 */
-    UFUNCTION(BlueprintCallable, Category = "Character|Class")
-    void SetPlayerClass(EAnabiosisPlayerClass NewClass);
+	// --- Setters & Modifiers ---
+	UFUNCTION(BlueprintCallable, Category = "Abilities")
+	void SetAttackAbilityTag(const FGameplayTag& NewTag);
+	
+	/** 设置角色旋转模式 (是否朝向移动方向，是否使用控制器 Yaw 旋转) */
+	void SetCharacterRotationMode(bool bOrientToMovement, bool bUseControllerRotation);
 
-    /** 获取当前职业 */
-    UFUNCTION(BlueprintPure, Category = "Character|Class")
-    EAnabiosisPlayerClass GetPlayerClass() const { return CurrentClass; }
+	/** 设置角色职业 (仅服务端有效) */
+	UFUNCTION(BlueprintCallable, Category = "Character|Class")
+	void SetPlayerClass(EAnabiosisPlayerClass NewClass);
 
-    /** 刷新能力输入绑定 */
-    UFUNCTION(BlueprintCallable, Category = "Abilities")
-    void RefreshAbilityBindings();
+	/** 刷新能力输入绑定 (可能需要审查逻辑) */
+	UFUNCTION(BlueprintCallable, Category = "Abilities")
+	void RefreshAbilityBindings();
 
 protected:
-    virtual void BeginPlay() override;
-    virtual void PossessedBy(AController* NewController) override;
-    virtual void OnRep_PlayerState() override;
-    
-    /** 初始化默认能力 */
-    void GiveDefaultAbilities();
+	//~ Begin AActor Interface
+	virtual void PostInitializeComponents() override; 
+	virtual void BeginPlay() override;
+	virtual void PossessedBy(AController* NewController) override;
+	//~ End AActor Interface
+	
+	/** 初始化默认能力 (仅服务端) */
+	virtual void GiveDefaultAbilities();
 
-    /** 处理职业变化的网络复制 */
-    UFUNCTION()
-    void OnRep_CurrentClass();
+	/** 根据当前职业更新属性 (仅服务端) */
+	virtual void UpdateAttributesForClass(); 
 
-    /** 更新角色属性为新职业的属性 */
-    void UpdateAttributesForClass();
+	/** 从数据表加载并初始化属性 (仅服务端) */
+	virtual void InitializeAttributesFromDataTable(); 
 };
