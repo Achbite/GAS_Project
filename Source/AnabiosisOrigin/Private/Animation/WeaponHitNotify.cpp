@@ -5,9 +5,9 @@
  * 主要功能：
  * - 在 NotifyBegin 时查找并缓存附加到角色上的武器组件。
  * - 在 NotifyTick 时使用缓存的武器组件，获取武器上的插槽位置。
- * - 在每一帧执行从上一帧末端位置到当前末端位置的扫描检测（球体或射线）。
- * - 处理命中结果，应用伤害（如果启用），并避免对同一 Actor 重复造成伤害。
- * - 提供调试可视化功能（绘制扫描轨迹和插槽位置）。
+ * - 在每一帧执行从当前武器起点到当前武器终点的扫描检测（球体或射线）。 // <--- 修改了检测方式
+ * - 处理命中结果，仅对 EnemyBaseCharacter 派生类播放受击蒙太奇，并避免重复处理。
+ * - 提供调试可视化功能（绘制扫描轨迹、插槽位置和命中点）。
  */
 
 #include "Animation/WeaponHitNotify.h"
@@ -17,11 +17,15 @@
 #include "DrawDebugHelpers.h"
 #include "Engine/Engine.h"
 #include "Kismet/KismetSystemLibrary.h"
-#include "GameFramework/DamageType.h"
-#include "GameFramework/Controller.h"
-#include "Engine/DamageEvents.h"
 #include "Components/PrimitiveComponent.h"
 #include "GameFramework/Actor.h"
+#include "CollisionQueryParams.h" // 包含 CollisionQueryParams.h
+#include "Characters/EnemyBaseCharacter.h" // 包含敌人基类头文件
+#include "Animation/AnimInstance.h"      // 包含动画实例头文件
+#include "Animation/AnimMontage.h"       // 包含动画蒙太奇头文件
+
+// 定义 Enemy 追踪通道的宏 (与 .h 文件和 EnemyBaseCharacter.cpp 中保持一致)
+#define COLLISION_ENEMY ECC_GameTraceChannel1
 
 // Define the log category
 DEFINE_LOG_CATEGORY(LogWeaponHitNotify);
@@ -32,10 +36,12 @@ UWeaponHitNotify::UWeaponHitNotify()
 	WeaponStartSocketName = FName("weapon_start");
 	WeaponEndSocketName = FName("weapon_end");
 	TraceRadius = 2.0f;
+	TraceChannel = COLLISION_ENEMY; // **默认使用 Enemy 通道**
 	bDebugTrace = true; // 默认开启调试模式
 	DebugDisplayTime = 2.0f;
 	bApplyDamage = false;
 	BaseDamage = 10.0f;
+	HitReactionMontage = nullptr; // 默认无蒙太奇
 	PreviousEndLocation = FVector::ZeroVector;
 	CachedWeaponMeshComp = nullptr; // 初始化缓存指针
 }
@@ -57,18 +63,14 @@ UPrimitiveComponent* FindAttachedWeaponComponent(const AActor* OwnerActor, FName
 		return nullptr;
 	}
 
-	UE_LOG(LogWeaponHitNotify, Log, TEXT("FindAttachedWeaponComponent: Searching on Owner '%s'"), *OwnerActor->GetName());
+	UE_LOG(LogWeaponHitNotify, Log, TEXT("FindAttachedWeaponComponent: Searching for weapon component with sockets '%s' and '%s' attached to '%s'."), *StartSocketName.ToString(), *EndSocketName.ToString(), *OwnerActor->GetName());
 
 	TArray<AActor*> AttachedActors;
 	OwnerActor->GetAttachedActors(AttachedActors); // 获取所有附加的子 Actor
 
-	UE_LOG(LogWeaponHitNotify, Log, TEXT("  Found %d Attached Actors."), AttachedActors.Num());
-
 	for (AActor* AttachedActor : AttachedActors)
 	{
 		if (!AttachedActor) continue;
-
-		UE_LOG(LogWeaponHitNotify, Log, TEXT("  Checking Attached Actor: '%s'"), *AttachedActor->GetName());
 
 		// 优先检查根组件
 		UPrimitiveComponent* RootPrimComp = Cast<UPrimitiveComponent>(AttachedActor->GetRootComponent());
@@ -76,12 +78,9 @@ UPrimitiveComponent* FindAttachedWeaponComponent(const AActor* OwnerActor, FName
 		{
 			bool bHasStartSocket = RootPrimComp->DoesSocketExist(StartSocketName);
 			bool bHasEndSocket = RootPrimComp->DoesSocketExist(EndSocketName);
-			UE_LOG(LogWeaponHitNotify, Log, TEXT("    Root Comp: '%s'. Socket '%s': %s. Socket '%s': %s"),
-					*RootPrimComp->GetName(), *StartSocketName.ToString(), bHasStartSocket ? TEXT("Exists") : TEXT("Missing"), *EndSocketName.ToString(), bHasEndSocket ? TEXT("Exists") : TEXT("Missing"));
-
 			if (bHasStartSocket && bHasEndSocket)
 			{
-				UE_LOG(LogWeaponHitNotify, Log, TEXT("    Found Weapon Component (Root): '%s' on Actor '%s'"), *RootPrimComp->GetName(), *AttachedActor->GetName());
+				UE_LOG(LogWeaponHitNotify, Log, TEXT("  Found Weapon Component (Root): '%s' on Actor '%s'"), *RootPrimComp->GetName(), *AttachedActor->GetName());
 				// 如果启用调试，绘制插槽位置
 				if (bDebug)
 				{
@@ -93,15 +92,10 @@ UPrimitiveComponent* FindAttachedWeaponComponent(const AActor* OwnerActor, FName
 				return RootPrimComp; // 找到即返回
 			}
 		}
-		else
-		{
-			UE_LOG(LogWeaponHitNotify, Log, TEXT("    Attached Actor '%s' has no Primitive Root Component."), *AttachedActor->GetName());
-		}
 
 		// 如果根组件不是，则检查该 Actor 内的所有 PrimitiveComponent
 		TArray<UPrimitiveComponent*> PrimitiveComponents;
 		AttachedActor->GetComponents<UPrimitiveComponent>(PrimitiveComponents);
-		UE_LOG(LogWeaponHitNotify, Log, TEXT("    Found %d Primitive Components in '%s'. Checking them..."), PrimitiveComponents.Num(), *AttachedActor->GetName());
 
 		for (UPrimitiveComponent* PrimComp : PrimitiveComponents)
 		{
@@ -109,12 +103,11 @@ UPrimitiveComponent* FindAttachedWeaponComponent(const AActor* OwnerActor, FName
 
 			bool bHasStartSocket = PrimComp->DoesSocketExist(StartSocketName);
 			bool bHasEndSocket = PrimComp->DoesSocketExist(EndSocketName);
-			UE_LOG(LogWeaponHitNotify, Log, TEXT("      Checking Comp: '%s'. Socket '%s': %s. Socket '%s': %s"),
-					*PrimComp->GetName(), *StartSocketName.ToString(), bHasStartSocket ? TEXT("Exists") : TEXT("Missing"), *EndSocketName.ToString(), bHasEndSocket ? TEXT("Exists") : TEXT("Missing"));
 
+			// 只在找到时或调试模式下记录详细信息，减少常规日志噪音
 			if (bHasStartSocket && bHasEndSocket)
 			{
-				UE_LOG(LogWeaponHitNotify, Log, TEXT("    Found Weapon Component (Non-Root): '%s' on Actor '%s'"), *PrimComp->GetName(), *AttachedActor->GetName());
+				UE_LOG(LogWeaponHitNotify, Log, TEXT("  Found Weapon Component (Non-Root): '%s' on Actor '%s'"), *PrimComp->GetName(), *AttachedActor->GetName());
 				// 如果启用调试，绘制插槽位置
 				if (bDebug)
 				{
@@ -122,16 +115,22 @@ UPrimitiveComponent* FindAttachedWeaponComponent(const AActor* OwnerActor, FName
 					FVector EndLoc = PrimComp->GetSocketLocation(EndSocketName);
 					DrawDebugSphere(PrimComp->GetWorld(), StartLoc, 5.f, 12, FColor::Magenta, false, DebugTime);
 					DrawDebugSphere(PrimComp->GetWorld(), EndLoc, 5.f, 12, FColor::Blue, false, DebugTime);
+					if (GEngine) GEngine->AddOnScreenDebugMessage(-1, DebugTime, FColor::Green, FString::Printf(TEXT("Found Weapon: %s on %s"), *PrimComp->GetName(), *AttachedActor->GetName())); // 简化屏幕消息
 				}
 				return PrimComp; // 找到即返回
+			}
+			else if (bDebug) // 如果是调试模式，记录哪个组件缺少插槽
+			{
+				UE_LOG(LogWeaponHitNotify, Verbose, TEXT("    Checked Comp: '%s'. Socket '%s': %s. Socket '%s': %s"), // 使用 Verbose 级别
+					*PrimComp->GetName(), *StartSocketName.ToString(), bHasStartSocket ? TEXT("Exists") : TEXT("Missing"), *EndSocketName.ToString(), bHasEndSocket ? TEXT("Exists") : TEXT("Missing"));
 			}
 		}
 	}
 
 	// 如果遍历完所有附加 Actor 及其组件都未找到
-	UE_LOG(LogWeaponHitNotify, Error, TEXT("FindAttachedWeaponComponent: Weapon component with sockets '%s' AND '%s' not found on '%s' or its attachments."),
+	UE_LOG(LogWeaponHitNotify, Error, TEXT("FindAttachedWeaponComponent: Weapon component with sockets '%s' AND '%s' not found attached to '%s'."),
 			*StartSocketName.ToString(),*EndSocketName.ToString(), *OwnerActor->GetName());
-	if (bDebug && GEngine) GEngine->AddOnScreenDebugMessage(-1, DebugTime, FColor::Red, FString::Printf(TEXT("FindAttachedWeaponComponent: Weapon component with sockets '%s' AND '%s' not found on '%s' or its attachments."),
+	if (bDebug && GEngine) GEngine->AddOnScreenDebugMessage(-1, DebugTime, FColor::Red, FString::Printf(TEXT("Weapon component with sockets '%s' AND '%s' not found attached to '%s'."), // 简化屏幕消息
 			*StartSocketName.ToString(),*EndSocketName.ToString(), *OwnerActor->GetName()));
 
 	return nullptr; // 未找到武器组件
@@ -192,20 +191,20 @@ void UWeaponHitNotify::NotifyBegin(USkeletalMeshComponent * MeshComp, UAnimSeque
 
 /**
  * @brief 通知状态在每一帧 Tick 时调用。
- *        执行扫描检测并处理命中。
+ *        执行扫描检测，过滤命中结果，对首次命中的敌人播放蒙太奇。
+ *        扫描范围为当前帧武器起点到终点。
  */
 void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation, float FrameDeltaTime)
 {
-	// 检查 OwnerActor 和缓存的武器组件是否有效，以及上一帧位置是否已初始化
+	// 检查 OwnerActor 和缓存的武器组件是否有效
 	AActor* OwnerActor = MeshComp ? MeshComp->GetOwner() : nullptr;
-	if (!OwnerActor || !CachedWeaponMeshComp || PreviousEndLocation.IsZero())
+	// 不再需要检查 PreviousEndLocation.IsZero()
+	if (!OwnerActor || !CachedWeaponMeshComp)
 	{
-		// 如果缓存的组件无效，但上一帧位置有效（说明Begin时找到了但现在丢失了），则打印错误
-		if (!CachedWeaponMeshComp && !PreviousEndLocation.IsZero())
+		if (!CachedWeaponMeshComp) // 仅在缓存丢失时记录错误
 		{
-			UE_LOG(LogWeaponHitNotify, Error, TEXT("NotifyTick: Cached Weapon component became NULL."));
-			if (GEngine && bDebugTrace) GEngine->AddOnScreenDebugMessage(-1, DebugDisplayTime, FColor::Red, TEXT("NotifyTick: Cached Weapon component became NULL."));
-			PreviousEndLocation = FVector::ZeroVector; // 重置位置以停止后续 Tick 处理
+			UE_LOG(LogWeaponHitNotify, Error, TEXT("NotifyTick: Cached Weapon component is NULL."));
+			if (GEngine && bDebugTrace) GEngine->AddOnScreenDebugMessage(-1, DebugDisplayTime, FColor::Red, TEXT("NotifyTick: Cached Weapon component is NULL."));
 		}
 		return; // 提前退出 Tick
 	}
@@ -226,8 +225,7 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 	{
 		UE_LOG(LogWeaponHitNotify, Warning, TEXT("WeaponHitNotify: Socket '%s' or '%s' returned zero location on component '%s' during Tick."),
 				*WeaponStartSocketName.ToString(), *WeaponEndSocketName.ToString(), *CachedWeaponMeshComp->GetName());
-		// 更新 PreviousEndLocation 以避免使用零向量进行追踪，并防止重复打印此警告
-		PreviousEndLocation = CurrentEndLocation.IsZero() ? (CurrentStartLocation.IsZero() ? FVector(1.f) : CurrentStartLocation) : CurrentEndLocation;
+		// PreviousEndLocation 不再需要更新
 		return;
 	}
 
@@ -253,41 +251,44 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 		ActorsToIgnore.Add(CachedWeaponMeshComp->GetOwner());
 	}
 
-	// 定义扫描的起点和终点（从上一帧末端到当前帧末端）
-	FVector TraceStart = PreviousEndLocation;
+	// 定义扫描的起点和终点为当前帧的武器插槽位置
+	FVector TraceStart = CurrentStartLocation;
 	FVector TraceEnd = CurrentEndLocation;
+
+	// 获取要使用的追踪通道类型
+	TEnumAsByte<ETraceTypeQuery> TraceType = UEngineTypes::ConvertToTraceType(TraceChannel);
 
 	// 根据 TraceRadius 选择球体扫描或射线扫描
 	if (TraceRadius > 0.0f)
 	{
-		// 球形扫描
+		// 球形扫描 (现在扫描的是剑身当前位置)
 		bHit = UKismetSystemLibrary::SphereTraceMulti(
-			CachedWeaponMeshComp->GetWorld(), // 使用武器组件所在的世界
+			CachedWeaponMeshComp->GetWorld(),
 			TraceStart,
 			TraceEnd,
 			TraceRadius,
-			UEngineTypes::ConvertToTraceType(ECC_Visibility), // 检测可见性通道
-			false, // 不检测复杂碰撞（已在 QueryParams 中设置）
+			TraceType,
+			false,
 			ActorsToIgnore,
-			bDebugTrace ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None, // 根据调试设置绘制轨迹
+			bDebugTrace ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None, // 调试线现在代表剑身
 			HitResults,
-			true, // 忽略自身 Actor (已在 ActorsToIgnore 中设置)
-			FLinearColor::Red, // 未命中颜色
-			FLinearColor::Green, // 命中颜色
+			true,
+			FLinearColor::Red,
+			FLinearColor::Green,
 			DebugDisplayTime
 		);
 	}
 	else
 	{
-		// 射线扫描
+		// 射线扫描 (现在扫描的是剑身当前位置)
 		bHit = UKismetSystemLibrary::LineTraceMulti(
 			CachedWeaponMeshComp->GetWorld(),
 			TraceStart,
 			TraceEnd,
-			UEngineTypes::ConvertToTraceType(ECC_Visibility),
+			TraceType,
 			false,
 			ActorsToIgnore,
-			bDebugTrace ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None,
+			bDebugTrace ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None, // 调试线现在代表剑身
 			HitResults,
 			true,
 			FLinearColor::Red,
@@ -302,39 +303,68 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 		for (const FHitResult& Hit : HitResults)
 		{
 			AActor* HitActor = Hit.GetActor();
-			// 检查命中的 Actor 是否有效，以及是否已在本轮通知中处理过
-			if (!HitActor || HitActors.Contains(HitActor))
+			// 检查命中的 Actor 是否有效
+			if (!HitActor)
 			{
 				continue;
 			}
 
-			// 将命中的 Actor 添加到已处理列表
-			HitActors.Add(HitActor);
+			// --- 过滤：只处理 EnemyBaseCharacter 派生类 ---
+			AEnemyBaseCharacter* EnemyCharacter = Cast<AEnemyBaseCharacter>(HitActor);
+			if (!EnemyCharacter)
+			{
+				// 如果不是敌人，可以选择记录日志或直接跳过
+				// UE_LOG(LogWeaponHitNotify, Verbose, TEXT("Weapon Hit ignored: %s (Not an EnemyBaseCharacter)"), *HitActor->GetName());
+				continue;
+			}
 
-			UE_LOG(LogWeaponHitNotify, Log, TEXT("Weapon Hit: %s (Bone: %s)"), *HitActor->GetName(), *Hit.BoneName.ToString());
-			if (GEngine && bDebugTrace) GEngine->AddOnScreenDebugMessage(-1, DebugDisplayTime, FColor::Green, FString::Printf(TEXT("武器命中: %s (骨骼: %s)"), *HitActor->GetName(), *Hit.BoneName.ToString()));
+			// --- 检查是否已在本轮通知中处理过此敌人 ---
+			if (HitActors.Contains(EnemyCharacter))
+			{
+				// UE_LOG(LogWeaponHitNotify, Verbose, TEXT("Weapon Hit ignored: %s (Already processed in this notify)"), *EnemyCharacter->GetName());
+				continue; // 跳过已记录的敌人
+			}
 
-			// 如果启用了伤害应用
+			// --- 处理首次命中的敌人 ---
+			HitActors.Add(EnemyCharacter); // 将有效且首次命中的敌人添加到列表
+
+			UE_LOG(LogWeaponHitNotify, Log, TEXT("Enemy Hit Added: %s (Trace Channel: %s)"), *EnemyCharacter->GetName(), *UEnum::GetValueAsString(TraceChannel.GetValue()));
+			if (GEngine && bDebugTrace)
+			{
+				// 在命中点绘制一个绿色的调试球体
+				DrawDebugSphere(GetWorld(), Hit.ImpactPoint, 10.f, 12, FColor::Green, false, DebugDisplayTime);
+				GEngine->AddOnScreenDebugMessage(-1, DebugDisplayTime, FColor::Green, FString::Printf(TEXT("武器命中敌人: %s (首次)"), *EnemyCharacter->GetName()));
+			}
+
+			// --- 尝试播放受击蒙太奇 ---
+			if (HitReactionMontage)
+			{
+				UAnimInstance* AnimInstance = EnemyCharacter->GetMesh() ? EnemyCharacter->GetMesh()->GetAnimInstance() : nullptr;
+				if (AnimInstance && !AnimInstance->Montage_IsPlaying(HitReactionMontage))
+				{
+					UE_LOG(LogWeaponHitNotify, Log, TEXT("  Playing Hit Reaction Montage '%s' on '%s'"), *HitReactionMontage->GetName(), *EnemyCharacter->GetName());
+					AnimInstance->Montage_Play(HitReactionMontage, 1.0f);
+				}
+				// else if (AnimInstance && AnimInstance->Montage_IsPlaying(HitReactionMontage)) { /* Log already playing */ }
+				// else if (!AnimInstance) { /* Log no anim instance */ }
+			}
+			else
+			{
+				UE_LOG(LogWeaponHitNotify, Verbose, TEXT("  No HitReactionMontage specified for this notify."));
+			}
+
+			// --- 伤害逻辑 (未来添加) ---
+			/*
 			if (bApplyDamage)
 			{
-				ACharacter* OwnerCharacter = Cast<ACharacter>(OwnerActor);
-				// 确保攻击者和其控制器有效
-				if (OwnerCharacter && OwnerCharacter->GetController())
-				{
-					// 创建点伤害事件，包含伤害值、命中信息、伤害方向和伤害类型
-					FPointDamageEvent DamageEvent(BaseDamage, Hit, (TraceEnd - TraceStart).GetSafeNormal(), UDamageType::StaticClass());
-					// 对命中的 Actor 应用伤害
-					HitActor->TakeDamage(BaseDamage, DamageEvent, OwnerCharacter->GetController(), OwnerActor);
-
-					UE_LOG(LogWeaponHitNotify, Log, TEXT("  Applied %.1f damage to %s"), BaseDamage, *HitActor->GetName());
-					if (GEngine && bDebugTrace) GEngine->AddOnScreenDebugMessage(-1, DebugDisplayTime, FColor::Orange, FString::Printf(TEXT("对 %s 造成 %.1f 伤害"), *HitActor->GetName(), BaseDamage));
-				}
+				// ...
 			}
+			*/
 		}
 	}
 
-	// 更新上一帧的末端位置，为下一帧的扫描做准备
-	PreviousEndLocation = CurrentEndLocation;
+	// PreviousEndLocation 不再需要更新
+	// PreviousEndLocation = CurrentEndLocation;
 }
 
 /**
@@ -345,8 +375,9 @@ void UWeaponHitNotify::NotifyEnd(USkeletalMeshComponent * MeshComp, UAnimSequenc
 {
 	// 清空已命中列表
 	HitActors.Empty();
-	// 重置上一帧位置
+	// 重置上一帧位置 (虽然不再用于 Tick 起点，但保持清理习惯)
 	PreviousEndLocation = FVector::ZeroVector;
 	// 清除缓存的武器组件指针
 	CachedWeaponMeshComp = nullptr;
+	UE_LOG(LogWeaponHitNotify, Log, TEXT("WeaponHitNotify::NotifyEnd - Cleared HitActors and Cache"));
 }

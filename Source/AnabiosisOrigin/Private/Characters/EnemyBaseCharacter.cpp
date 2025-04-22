@@ -27,6 +27,11 @@
 #include "AbilitySystemComponent.h"
 #include "Attributes/EnemyAttributeSet.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "Components/CapsuleComponent.h"
+// #include "Components/SkeletalMeshComponent.h" // 不再需要包含
+#include "Engine/CollisionProfile.h"
+
+#define COLLISION_ENEMY ECC_GameTraceChannel1
 
 AEnemyBaseCharacter::AEnemyBaseCharacter()
 {
@@ -50,6 +55,31 @@ AEnemyBaseCharacter::AEnemyBaseCharacter()
 
     // 创建属性集
     AttributeSet = CreateDefaultSubobject<UEnemyAttributeSet>(TEXT("AttributeSet"));
+
+    // 设置胶囊体碰撞
+    UCapsuleComponent* Capsule = GetCapsuleComponent();
+    if (Capsule)
+    {
+        Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+        Capsule->SetCollisionObjectType(ECC_Pawn);
+        Capsule->SetCollisionResponseToAllChannels(ECR_Block);
+        Capsule->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+        Capsule->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
+        Capsule->SetCollisionResponseToChannel(COLLISION_ENEMY, ECR_Block);
+    }
+
+    // 移除设置骨骼网格碰撞的代码
+    /*
+    USkeletalMeshComponent* MeshComp = GetMesh();
+    if (MeshComp)
+    {
+        MeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+        MeshComp->SetCollisionObjectType(ECC_SkeletalMesh);
+        MeshComp->SetCollisionResponseToAllChannels(ECR_Ignore);
+        MeshComp->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+        MeshComp->SetCollisionResponseToChannel(COLLISION_ENEMY, ECR_Ignore);
+    }
+    */
 }
 
 void AEnemyBaseCharacter::BeginPlay()
