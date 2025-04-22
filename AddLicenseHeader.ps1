@@ -1,12 +1,13 @@
 <#
 .SYNOPSIS
 Adds a license header to C++ source files (.h, .cpp) and Lua script files (.lua)
-within specified directories.
+within specified directories. Skips files that already contain a copyright notice.
 
 .DESCRIPTION
 This script iterates through the specified source and script directories,
-reads each file, checks if the license header already exists, and prepends
-the header if it's missing. It uses appropriate comment styles for C++ and Lua.
+reads each file, checks if a copyright header (Copyright (C) YYYY) already exists
+within the first few lines, and prepends the current year's header if it's missing.
+It uses appropriate comment styles for C++ and Lua.
 
 .PARAMETER CppSourceDir
 The root directory containing C++ source files (.h, .cpp).
@@ -32,9 +33,11 @@ param(
 )
 
 # --- License Text ---
+# Use dynamic year for the license text itself
+$currentYear = Get-Date -Format yyyy
 $cppLicenseText = @"
 /* 
- * Copyright (C) $(Get-Date -Format yyyy) $CopyrightHolder
+ * Copyright (C) $currentYear $CopyrightHolder
  * 
  * This program is free software: you can redistribute it and/or modify 
  * it under the terms of the GNU General Public License as published by 
@@ -53,7 +56,7 @@ $cppLicenseText = @"
 
 $luaLicenseText = @"
 --[[ 
- -- Copyright (C) $(Get-Date -Format yyyy) $CopyrightHolder
+ -- Copyright (C) $currentYear $CopyrightHolder
  -- 
  -- This program is free software: you can redistribute it and/or modify 
  -- it under the terms of the GNU General Public License as published by 
@@ -75,24 +78,26 @@ function Add-LicenseHeaderToFile {
     param(
         [string]$FilePath,
         [string]$LicenseText,
-        [string]$CopyrightCheckString
+        [string]$CopyrightRegexPattern = 'Copyright \(C\) \d{4}' # Regex to find any year
     )
 
     try {
         Write-Host "Processing: $FilePath" -ForegroundColor Cyan
-        $content = Get-Content -Path $FilePath -Raw -Encoding UTF8 -ErrorAction Stop
-        $firstLine = ($content -split '\r?\n')[0] # Get the first line for check
+        # Read only the first few lines for checking to improve performance
+        $linesToCheck = Get-Content -Path $FilePath -Encoding UTF8 -TotalCount 10 -ErrorAction Stop
+        $contentToCheck = $linesToCheck -join "`n" # Join lines for easier regex matching
 
-        # Check if license already exists (simple check on the first few lines)
-        if ($content.StartsWith($CopyrightCheckString) -or $firstLine.Contains($CopyrightCheckString)) {
+        # Check if license already exists using regex
+        if ($contentToCheck -match $CopyrightRegexPattern) {
             Write-Host "  License header already exists. Skipping." -ForegroundColor Gray
             return
         }
 
-        # Prepend license
-        $newContent = $LicenseText + "`r`n" + $content # Use CRLF for consistency, adjust if needed
+        # If no license found, read the full content and prepend
+        $fullContent = Get-Content -Path $FilePath -Raw -Encoding UTF8 -ErrorAction Stop
+        $newContent = $LicenseText + "`r`n" + $fullContent # Use CRLF for consistency, adjust if needed
         
-        # Write back to file
+        # Write back to file using UTF-8
         Set-Content -Path $FilePath -Value $newContent -Encoding UTF8 -Force -ErrorAction Stop
         Write-Host "  License header added." -ForegroundColor Green
 
@@ -103,22 +108,24 @@ function Add-LicenseHeaderToFile {
 
 # --- Process C++ Files ---
 $cppFiles = Get-ChildItem -Path $CppSourceDir -Recurse -Include *.h, *.cpp
-$cppCopyrightCheck = "Copyright (C) $(Get-Date -Format yyyy) $CopyrightHolder" # String to check for existence
+# No need for cppCopyrightCheck string anymore, using regex by default
 
 Write-Host "--- Processing C++ Files in '$CppSourceDir' ---" -ForegroundColor Yellow
 foreach ($file in $cppFiles) {
-    Add-LicenseHeaderToFile -FilePath $file.FullName -LicenseText $cppLicenseText -CopyrightCheckString $cppCopyrightCheck
+    # Pass the dynamically generated C++ license text
+    Add-LicenseHeaderToFile -FilePath $file.FullName -LicenseText $cppLicenseText 
 }
 
 # --- Process Lua Files ---
 # Check if Lua directory exists before processing
 if (Test-Path $LuaScriptDir -PathType Container) {
     $luaFiles = Get-ChildItem -Path $LuaScriptDir -Recurse -Include *.lua
-    $luaCopyrightCheck = "Copyright (C) $(Get-Date -Format yyyy) $CopyrightHolder" # String to check for existence
+    # No need for luaCopyrightCheck string anymore, using regex by default
 
     Write-Host "--- Processing Lua Files in '$LuaScriptDir' ---" -ForegroundColor Yellow
     foreach ($file in $luaFiles) {
-        Add-LicenseHeaderToFile -FilePath $file.FullName -LicenseText $luaLicenseText -CopyrightCheckString $luaCopyrightCheck
+        # Pass the dynamically generated Lua license text
+        Add-LicenseHeaderToFile -FilePath $file.FullName -LicenseText $luaLicenseText
     }
 } else {
     Write-Warning "Lua script directory '$LuaScriptDir' not found. Skipping Lua file processing."

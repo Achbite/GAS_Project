@@ -14,10 +14,6 @@
  * You should have received a copy of the GNU General Public License 
  * along with this program.  If not, see https://www.gnu.org/licenses/. 
  */
-/* 
- * ... (版权和文件描述) ...
- */ 
- 
 /*
 * 文件名: EnemyAttributeSet.h
 * 功能描述： 定义敌人 AI 角色的属性集 (AttributeSet)。包含战斗属性和 AI 相关属性。
