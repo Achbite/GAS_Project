@@ -44,3 +44,32 @@ Content/Collections/
 # 操作系统生成的文件
 .DS_Store
 Thumbs.db
+
+# --- Plugin Specific Ignores ---
+# 忽略插件中常见的可生成/临时目录和文件
+Plugins/**/Intermediate/
+Plugins/**/Binaries/
+Plugins/**/Saved/
+Plugins/**/.vs/
+Plugins/**/DerivedDataCache/
+Plugins/**/Script/IntelliSense/ # 假设这是IntelliSense文件的存放位置
+Plugins/**/*.pdb # 通常不需要追踪调试符号
+Plugins/**/*.obj # 中间编译文件
+Plugins/**/*.log # 插件日志
+
+# --- Plugin Specific Un-Ignores (Optional) ---
+# 如果插件依赖某些必须追踪的预编译库（非引擎编译输出），在此处取消忽略
+# 例如: 取消忽略 UnLua 插件附带的 Lua 库文件
+!Plugins/UnLua/Source/ThirdParty/Lua/**/lib*/**/*.dll
+!Plugins/UnLua/Source/ThirdParty/Lua/**/lib*/**/*.lib
+!Plugins/UnLua/Source/ThirdParty/Lua/**/lib*/**/*.a
+!Plugins/UnLua/Source/ThirdParty/Lua/**/lib*/**/*.so
+!Plugins/UnLua/Source/ThirdParty/Lua/**/lib*/**/*.dylib
+# !Plugins/AnotherPlugin/Source/ThirdParty/SomeLib/Win64/*.dll
+
+# 注意: 源代码 (.h, .cpp, .cs, .lua), 资源 (.uasset, .umap),
+# 配置文件 (.ini), 构建脚本 (.Build.cs), 模块文件 (.uplugin) 等
+# 通常不会被上面的通用规则忽略，因此默认会被追踪，无需添加 ! 规则。
+
+# Note: Ensure any broader ignore rules appear *before* these ! rules.
+# 之前的宽泛 !Plugins/**/... 规则已被移除
