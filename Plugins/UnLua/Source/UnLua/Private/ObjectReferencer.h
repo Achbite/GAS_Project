@@ -14,8 +14,9 @@
 
 #pragma once
 
-#include "Containers/Set.h"
+#include "CoreMinimal.h"
 #include "UObject/GCObject.h"
+#include "UObject/ObjectPtr.h" // Include TObjectPtr header
 
 namespace UnLua
 {
@@ -58,7 +59,7 @@ namespace UnLua
         }
 
     private:
-        TSet<UObject*> ReferencedObjects;
+        TSet<TObjectPtr<UObject>> ReferencedObjects; // Use TObjectPtr
         FString Name = TEXT("FObjectReferencer");
     };
 }
