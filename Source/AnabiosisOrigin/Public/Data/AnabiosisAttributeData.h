@@ -114,5 +114,9 @@ struct FAnabiosisAttributeData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth", meta = (ClampMin = "1.0"))
 	float ManaGrowthRate = 1.15f; // 法力值成长率
 
+	// --- 动画 ---
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	TObjectPtr<UAnimMontage> DeathMontage; // 死亡蒙太奇
+
 	FAnabiosisAttributeData() = default; // 使用默认构造函数
 };

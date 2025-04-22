@@ -167,7 +167,6 @@ void AAnabiosisPlayerController::OnAttackActionStarted(const FInputActionValue& 
 	FGameplayTagContainer AbilityTags;
 	AbilityTags.AddTag(AttackTag);
 	
-	UE_LOG(LogTemp, Verbose, TEXT("Trying to activate ability with tag: %s"), *AttackTag.ToString());
 	bool bSuccess = AbilitySystem->TryActivateAbilitiesByTag(AbilityTags);
 	if (!bSuccess)
 	{

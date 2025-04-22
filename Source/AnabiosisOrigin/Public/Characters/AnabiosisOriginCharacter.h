@@ -36,6 +36,7 @@ class USpringArmComponent;
 class UCameraComponent;
 class UAttributeSet;
 class UAbilitySystemComponent;
+class UAnimMontage; // Forward declare UAnimMontage
 
 UCLASS(config=Game)
 class AAnabiosisOriginCharacter : public ACharacter, public IAbilitySystemInterface
@@ -84,6 +85,14 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character|Animation")
 	TObjectPtr<UAnimMontage> HitReactionMontage; // 受击反应蒙太奇
 
+	/** 从数据表加载的死亡蒙太奇 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Character|Animation", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<UAnimMontage> LoadedDeathMontage; // 加载的死亡蒙太奇
+
+	/** 标记角色是否已死亡，防止重复触发死亡逻辑 */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Character|State")
+	bool bIsDead; // 是否已死亡
+
 public:
 	AAnabiosisOriginCharacter();
 
@@ -101,6 +110,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Character|Class")
 	EAnabiosisPlayerClass GetPlayerClass() const { return CurrentClass; }
 
+	/** 检查角色是否已死亡 */
+	UFUNCTION(BlueprintPure, Category = "Character|State")
+	bool IsDead() const;
+
 	// --- Setters & Modifiers ---
 	UFUNCTION(BlueprintCallable, Category = "Abilities")
 	void SetAttackAbilityTag(const FGameplayTag& NewTag);
@@ -115,6 +128,9 @@ public:
 	/** 刷新能力输入绑定 (可能需要审查逻辑) */
 	UFUNCTION(BlueprintCallable, Category = "Abilities")
 	void RefreshAbilityBindings();
+
+	/** 处理角色死亡逻辑 (公开，以便 AttributeSet 可以调用) */
+	virtual void HandleDeath();
 
 protected:
 	//~ Begin AActor Interface
@@ -131,4 +147,14 @@ protected:
 
 	/** 从数据表加载并初始化属性 (仅服务端) */
 	virtual void InitializeAttributesFromDataTable(); 
+
+	/** 死亡蒙太奇播放结束时调用 */
+	UFUNCTION() // UFUNCTION is required for delegate binding
+	virtual void OnDeathMontageEnded(UAnimMontage* Montage, bool bInterrupted);
+
+	/** 监听生命值变化的回调 */
+	virtual void OnHealthAttributeChanged(const FOnAttributeChangeData& Data);
+
+	/** 绑定属性变化监听器 */
+	void BindAttributeChangeListeners();
 };

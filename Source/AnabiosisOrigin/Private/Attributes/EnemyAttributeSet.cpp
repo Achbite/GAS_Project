@@ -123,5 +123,6 @@ void UEnemyAttributeSet::InitializeFromDataTable(const UDataTable* DataTable, co
 	ASC->SetNumericAttributeBase(GetAggroValueAttribute(), 0.0f); 
 	SetAggroValue(0.0f); 
 
-	UE_LOG(LogTemp, Log, TEXT("Enemy attributes initialized from DataTable row '%s'."), *RowName.ToString());
+	// 可以移除这个日志，除非调试初始化问题
+	// UE_LOG(LogTemp, Log, TEXT("Enemy attributes initialized from DataTable row '%s'."), *RowName.ToString());
 }

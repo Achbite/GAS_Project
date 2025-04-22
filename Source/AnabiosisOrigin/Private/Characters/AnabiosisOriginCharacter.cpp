@@ -16,6 +16,7 @@
 #include "AbilitySystemGlobals.h" 
 #include "Attributes/AnabiosisAttributeSet.h" 
 #include "Data/AnabiosisAttributeData.h" 
+#include "Animation/AnimInstance.h" // Include for AnimInstance
 
 AAnabiosisOriginCharacter::AAnabiosisOriginCharacter()
 {
@@ -54,11 +55,14 @@ AAnabiosisOriginCharacter::AAnabiosisOriginCharacter()
     AttributeDataTable = nullptr;
     AttributeDataRowName = NAME_None;
     CurrentClass = EAnabiosisPlayerClass::Warrior; // 设置默认职业
+    LoadedDeathMontage = nullptr; // Initialize death montage pointer
+    bIsDead = false; // Initialize dead state
 }
 
 void AAnabiosisOriginCharacter::BeginPlay()
 {
     Super::BeginPlay();
+    BindAttributeChangeListeners(); // 绑定监听器
 }
 
 UAbilitySystemComponent* AAnabiosisOriginCharacter::GetAbilitySystemComponent() const
@@ -79,6 +83,7 @@ void AAnabiosisOriginCharacter::PossessedBy(AController* NewController)
         // InitializeAttributesFromDataTable(); 
         
         GiveDefaultAbilities(); 
+        BindAttributeChangeListeners(); // 在 PossessedBy 中也绑定，确保 ASC 有效
     }
     else
     {
@@ -183,6 +188,11 @@ void AAnabiosisOriginCharacter::RefreshAbilityBindings()
     UE_LOG(LogTemp, Warning, TEXT("RefreshAbilityBindings called. Review its logic if issues arise."));
 }
 
+bool AAnabiosisOriginCharacter::IsDead() const
+{
+    return bIsDead;
+}
+
 void AAnabiosisOriginCharacter::PostInitializeComponents()
 {
     Super::PostInitializeComponents();
@@ -192,6 +202,8 @@ void AAnabiosisOriginCharacter::PostInitializeComponents()
     {
         InitializeAttributesFromDataTable();
     }
+    // 客户端也需要绑定监听器，以便在本地预测或UI更新时反应
+    // BindAttributeChangeListeners(); // 移至 BeginPlay 和 PossessedBy
 }
 
 void AAnabiosisOriginCharacter::InitializeAttributesFromDataTable()
@@ -258,5 +270,117 @@ void AAnabiosisOriginCharacter::InitializeAttributesFromDataTable()
     AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetCriticalMultiplierAttribute(), Row->CriticalMultiplier);
     PlayerAttributeSet->SetCriticalMultiplier(Row->CriticalMultiplier);
 
-    UE_LOG(LogTemp, Log, TEXT("Player %s initialized attributes from DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
+    // --- 加载死亡蒙太奇 ---
+    LoadedDeathMontage = Row->DeathMontage;
+    if (!LoadedDeathMontage)
+    {
+        // 保留警告
+        UE_LOG(LogTemp, Warning, TEXT("Player %s: DeathMontage is not set in DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
+    }
+
+    // 保留初始化完成日志
+    UE_LOG(LogTemp, Log, TEXT("Player %s initialized attributes and montages from DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
+}
+
+void AAnabiosisOriginCharacter::BindAttributeChangeListeners()
+{
+	if (AbilitySystemComponent && AttributeSet)
+	{
+		const UAnabiosisAttributeSet* PlayerAttributeSet = Cast<const UAnabiosisAttributeSet>(AttributeSet);
+		if (PlayerAttributeSet)
+		{
+			AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(PlayerAttributeSet->GetHealthAttribute()).AddUObject(this, &AAnabiosisOriginCharacter::OnHealthAttributeChanged);
+			// UE_LOG(LogTemp, Verbose, TEXT("Bound Health change listener for %s"), *GetName()); // 可以移除或改为更低级别
+		}
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("BindAttributeChangeListeners: AttributeSet is not UAnabiosisAttributeSet for %s"), *GetName());
+		}
+	}
+	// else
+	// {
+		// UE_LOG(LogTemp, Verbose, TEXT("BindAttributeChangeListeners: ASC or AttributeSet is null for %s. Will retry on PossessedBy."), *GetName()); // 可以移除
+	// }
+}
+
+void AAnabiosisOriginCharacter::OnHealthAttributeChanged(const FOnAttributeChangeData& Data)
+{
+	// 保留生命值变化日志，对于调试很有用
+	UE_LOG(LogTemp, Verbose, TEXT("%s Health changed from %.1f to %.1f"), *GetName(), Data.OldValue, Data.NewValue);
+	if (!bIsDead && Data.NewValue <= 0.0f && Data.OldValue > 0.0f) 
+	{
+		HandleDeath(); // HandleDeath 内部有日志
+	}
+}
+
+void AAnabiosisOriginCharacter::HandleDeath()
+{
+	if (bIsDead)
+	{
+		return;
+	}
+	bIsDead = true;
+	// 保留死亡处理开始日志
+	UE_LOG(LogTemp, Log, TEXT("AnabiosisOriginCharacter %s is handling death."), *GetName());
+
+	// 停止移动
+	if (GetCharacterMovement())
+	{
+		GetCharacterMovement()->StopMovementImmediately();
+		GetCharacterMovement()->DisableMovement();
+		GetCharacterMovement()->SetComponentTickEnabled(false);
+	}
+
+	// 禁用碰撞
+	if (UCapsuleComponent* CapsuleComp = GetCapsuleComponent())
+	{
+		CapsuleComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		CapsuleComp->SetCollisionResponseToAllChannels(ECR_Ignore);
+	}
+	if (GetMesh())
+	{
+		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	}
+
+	// 播放死亡蒙太奇
+	UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+	if (AnimInstance && LoadedDeathMontage)
+	{
+		const float PlayRate = 1.0f;
+		AnimInstance->Montage_Play(LoadedDeathMontage, PlayRate);
+		FOnMontageEnded MontageEndedDelegate;
+		MontageEndedDelegate.BindUObject(this, &AAnabiosisOriginCharacter::OnDeathMontageEnded);
+		AnimInstance->Montage_SetEndDelegate(MontageEndedDelegate, LoadedDeathMontage);
+		// 可以保留播放蒙太奇的日志，或改为 Verbose
+		UE_LOG(LogTemp, Log, TEXT("  Playing Death Montage: %s"), *LoadedDeathMontage->GetName());
+	}
+	else
+	{
+		// 保留重要警告
+		UE_LOG(LogTemp, Warning, TEXT("  Cannot play death montage: AnimInstance (%p) or LoadedDeathMontage (%p) is invalid."), AnimInstance, LoadedDeathMontage.Get());
+		SetLifeSpan(3.0f); 
+	}
+
+	// 可选：取消能力
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->CancelAllAbilities();
+	}
+
+	// 可选：禁用输入
+	APlayerController* PC = Cast<APlayerController>(GetController());
+	if (PC)
+	{
+		DisableInput(PC);
+	}
+
+	// 可选：触发游戏结束逻辑等
+}
+
+void AAnabiosisOriginCharacter::OnDeathMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	// 保留蒙太奇结束和销毁日志
+	UE_LOG(LogTemp, Log, TEXT("AnabiosisOriginCharacter %s death montage ended (Interrupted: %s). Destroying Actor."), *GetName(), bInterrupted ? TEXT("Yes") : TEXT("No"));
+	Destroy();
+	// 或者触发其他逻辑，例如显示重生菜单
 }

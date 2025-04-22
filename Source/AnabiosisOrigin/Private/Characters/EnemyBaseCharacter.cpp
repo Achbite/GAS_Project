@@ -34,6 +34,7 @@
 #include "GameFramework/Controller.h" // Include Controller for TakeDamage override
 #include "Engine/DamageEvents.h"    // Include DamageEvents for TakeDamage override
 #include "Components/SkeletalMeshComponent.h" // 包含骨骼网格体组件头文件
+#include "Animation/AnimInstance.h" // Include for AnimInstance
 
 #define COLLISION_ENEMY ECC_GameTraceChannel1
 
@@ -84,6 +85,8 @@ AEnemyBaseCharacter::AEnemyBaseCharacter()
     AttributeDataRowName = NAME_None;
 
     LoadedHitReactionMontage = nullptr; // Initialize the pointer
+    LoadedDeathMontage = nullptr; // Initialize death montage pointer
+    bIsDead = false; // Initialize dead state
 }
 
 void AEnemyBaseCharacter::PostInitializeComponents()
@@ -188,10 +191,20 @@ void AEnemyBaseCharacter::InitializeAttributesFromDataTable()
     LoadedHitReactionMontage = Row->HitReactionMontage;
     if (!LoadedHitReactionMontage)
     {
+        // 保留警告
         UE_LOG(LogTemp, Warning, TEXT("Enemy %s: HitReactionMontage is not set in DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
     }
 
-    UE_LOG(LogTemp, Log, TEXT("Enemy %s initialized attributes and montage from DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
+    // --- 加载并存储死亡蒙太奇 ---
+    LoadedDeathMontage = Row->DeathMontage;
+    if (!LoadedDeathMontage)
+    {
+        // 保留警告
+        UE_LOG(LogTemp, Warning, TEXT("Enemy %s: DeathMontage is not set in DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
+    }
+
+    // 保留初始化完成日志
+    UE_LOG(LogTemp, Log, TEXT("Enemy %s initialized attributes and montages from DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
 
     // 应用其他从数据表读取的配置，例如 AI 参数 (如果需要)
     // GetCharacterMovement()->MaxWalkSpeed = ... Row->MovementSpeed ... (如果数据表中有)
@@ -230,35 +243,111 @@ void AEnemyBaseCharacter::PossessedBy(AController* NewController)
     }
 }
 
+bool AEnemyBaseCharacter::IsDead() const
+{
+    return bIsDead;
+}
+
 float AEnemyBaseCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
-	// 调用基类实现（可能触发蓝图事件等）
+	if (IsDead()) // 如果已死亡，不再接受伤害
+	{
+		return 0.f;
+	}
+
 	const float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
 
 	if (ActualDamage > 0.f && AttributeSet && AbilitySystemComponent)
 	{
-		// 直接修改 Health 属性
-		// 注意：这种方式绕过了 GameplayEffect 的执行流程，可能不触发某些依赖 GE 的逻辑
-		// 但对于简单的伤害扣血是可行的
 		const float OldHealth = AttributeSet->GetHealth();
 		float NewHealth = OldHealth - ActualDamage;
-
-		// 使用 AttributeSet 的 Setter 来确保 Clamp 逻辑被调用（如果 PostGameplayEffectExecute 中有）
-		// 或者直接 Clamp
 		NewHealth = FMath::Clamp(NewHealth, 0.0f, AttributeSet->GetMaxHealth());
-		AttributeSet->SetHealth(NewHealth); // 直接设置当前值
+		AttributeSet->SetHealth(NewHealth);
 
-		// 可选：如果需要更新基础值（通常不直接在受伤时做）
-		// AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetHealthAttribute(), NewHealth);
-
+		// 保留伤害日志
 		UE_LOG(LogTemp, Log, TEXT("EnemyBaseCharacter %s Took %.1f damage. Health changed from %.1f to %.1f"), *GetName(), ActualDamage, OldHealth, NewHealth);
+
+		// 检查是否死亡
+		if (NewHealth <= 0.0f)
+		{
+			HandleDeath(); // HandleDeath 内部有日志
+		}
 	}
 	else if (ActualDamage > 0.f)
 	{
+		// 保留重要警告
 		UE_LOG(LogTemp, Warning, TEXT("EnemyBaseCharacter %s Took %.1f damage, but AttributeSet or ASC is missing!"), *GetName(), ActualDamage);
 	}
 
-	return ActualDamage; // 返回实际受到的伤害
+	return ActualDamage;
+}
+
+void AEnemyBaseCharacter::HandleDeath()
+{
+	if (bIsDead) // 防止重复执行
+	{
+		return;
+	}
+	bIsDead = true;
+	// 保留死亡处理开始日志
+	UE_LOG(LogTemp, Log, TEXT("EnemyBaseCharacter %s is handling death."), *GetName());
+
+	// 停止移动
+	if (GetCharacterMovement())
+	{
+		GetCharacterMovement()->StopMovementImmediately();
+		GetCharacterMovement()->DisableMovement();
+		GetCharacterMovement()->SetComponentTickEnabled(false);
+	}
+
+	// 禁用碰撞 (保留查询以便可能的交互，例如拾取)
+	if (UCapsuleComponent* CapsuleComp = GetCapsuleComponent())
+	{
+		CapsuleComp->SetCollisionEnabled(ECollisionEnabled::NoCollision); // 完全禁用碰撞
+		CapsuleComp->SetCollisionResponseToAllChannels(ECR_Ignore);
+	}
+	if (GetMesh())
+	{
+		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision); // 确保骨骼网格体也无碰撞
+	}
+
+
+	// 播放死亡蒙太奇
+	UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+	if (AnimInstance && LoadedDeathMontage)
+	{
+		const float PlayRate = 1.0f;
+		AnimInstance->Montage_Play(LoadedDeathMontage, PlayRate);
+		// 绑定蒙太奇结束事件
+		FOnMontageEnded MontageEndedDelegate;
+		MontageEndedDelegate.BindUObject(this, &AEnemyBaseCharacter::OnDeathMontageEnded);
+		AnimInstance->Montage_SetEndDelegate(MontageEndedDelegate, LoadedDeathMontage);
+		// 可以保留播放蒙太奇的日志，或改为 Verbose
+		UE_LOG(LogTemp, Log, TEXT("  Playing Death Montage: %s"), *LoadedDeathMontage->GetName());
+	}
+	else
+	{
+		// 保留重要警告
+		UE_LOG(LogTemp, Warning, TEXT("  Cannot play death montage: AnimInstance (%p) or LoadedDeathMontage (%p) is invalid."), AnimInstance, LoadedDeathMontage.Get());
+		SetLifeSpan(3.0f); 
+	}
+
+	// 可选：取消所有激活的能力
+	if (AbilitySystemComponent)
+	{
+		AbilitySystemComponent->CancelAllAbilities();
+	}
+
+	// 可选：通知 AI 控制器角色已死亡
+	// AAIController* AIController = Cast<AAIController>(GetController());
+	// if (AIController) { // ... 通知逻辑 ... }
+}
+
+void AEnemyBaseCharacter::OnDeathMontageEnded(UAnimMontage* Montage, bool bInterrupted)
+{
+	// 保留蒙太奇结束和销毁日志
+	UE_LOG(LogTemp, Log, TEXT("EnemyBaseCharacter %s death montage ended (Interrupted: %s). Destroying Actor."), *GetName(), bInterrupted ? TEXT("Yes") : TEXT("No"));
+	Destroy();
 }
 
 void AEnemyBaseCharacter::GiveDefaultAbilities()

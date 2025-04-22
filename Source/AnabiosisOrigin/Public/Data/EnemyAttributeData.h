@@ -110,6 +110,10 @@ struct FEnemyAttributeData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Behavior")
 	TObjectPtr<UAnimMontage> HitReactionMontage; // 受击反应蒙太奇
 
+	/** 死亡时播放的动画蒙太奇 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Behavior")
+	TObjectPtr<UAnimMontage> DeathMontage; // 死亡蒙太奇
+
 	// --- 奖励系统 ---
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rewards", meta = (ClampMin = "0.0"))
 	float ExperienceValue = 10.0f; // 经验值

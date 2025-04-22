@@ -59,8 +59,6 @@ UPrimitiveComponent* FindAttachedWeaponComponent(const AActor* OwnerActor, FName
 		return nullptr;
 	}
 
-	UE_LOG(LogWeaponHitNotify, Verbose, TEXT("FindAttachedWeaponComponent: Searching for weapon component with sockets '%s' and '%s' attached to '%s'."), *StartSocketName.ToString(), *EndSocketName.ToString(), *OwnerActor->GetName());
-
 	TArray<AActor*> AttachedActors;
 	OwnerActor->GetAttachedActors(AttachedActors, true); // true 表示递归查找所有附加的 Actor
 
@@ -74,7 +72,6 @@ UPrimitiveComponent* FindAttachedWeaponComponent(const AActor* OwnerActor, FName
 		bool bHasEndSocket = PrimComp->DoesSocketExist(EndSocketName);
 		if (bHasStartSocket && bHasEndSocket)
 		{
-			UE_LOG(LogWeaponHitNotify, Verbose, TEXT("  Found Weapon Component (Owner): '%s'"), *PrimComp->GetName());
 			if (bDebug)
 			{
 				FVector StartLoc = PrimComp->GetSocketLocation(StartSocketName);
@@ -105,7 +102,6 @@ UPrimitiveComponent* FindAttachedWeaponComponent(const AActor* OwnerActor, FName
 
 			if (bHasStartSocket && bHasEndSocket)
 			{
-				UE_LOG(LogWeaponHitNotify, Verbose, TEXT("  Found Weapon Component (Attached): '%s' on Actor '%s'"), *PrimComp->GetName(), *AttachedActor->GetName());
 				if (bDebug)
 				{
 					FVector StartLoc = PrimComp->GetSocketLocation(StartSocketName);
@@ -130,8 +126,6 @@ UPrimitiveComponent* FindAttachedWeaponComponent(const AActor* OwnerActor, FName
 
 void UWeaponHitNotify::NotifyBegin(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation, float TotalDuration)
 {
-	UE_LOG(LogWeaponHitNotify, Verbose, TEXT("WeaponHitNotify::NotifyBegin - Anim: %s"), *GetNameSafe(Animation));
-
 	if (!MeshComp)
 	{
 		UE_LOG(LogWeaponHitNotify, Error, TEXT("NotifyBegin: MeshComp is NULL"));
@@ -156,8 +150,6 @@ void UWeaponHitNotify::NotifyBegin(USkeletalMeshComponent * MeshComp, UAnimSeque
 		// FindAttachedWeaponComponent 内部已记录错误
 		return; 
 	}
-	
-	UE_LOG(LogWeaponHitNotify, Verbose, TEXT("NotifyBegin: Cached weapon component '%s'"), *CachedWeaponMeshComp->GetName());
 }
 
 void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequenceBase * Animation, float FrameDeltaTime)
@@ -259,14 +251,12 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 				MontageToPlay = EnemyCharacter->GetHitReactionMontage();
 				if (!MontageToPlay)
 				{
-					 UE_LOG(LogWeaponHitNotify, Verbose, TEXT("  Enemy '%s' has no specific montage, checking fallback."), *EnemyCharacter->GetName());
 					 MontageToPlay = this->HitReactionMontage; // 使用 Notify 自身的蒙太奇作为备选
 				}
 			}
 			else
 			{
 				 // 如果命中的不是 EnemyBaseCharacter，也尝试使用备选蒙太奇
-				 UE_LOG(LogWeaponHitNotify, Verbose, TEXT("  Hit Character '%s' is not EnemyBaseCharacter, checking fallback."), *HitCharacter->GetName());
 				 MontageToPlay = this->HitReactionMontage;
 			}
 
@@ -275,17 +265,8 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 				UAnimInstance* AnimInstance = HitCharacter->GetMesh() ? HitCharacter->GetMesh()->GetAnimInstance() : nullptr;
 				if (AnimInstance && !AnimInstance->Montage_IsPlaying(MontageToPlay)) // 避免重复播放同一蒙太奇
 				{
-					UE_LOG(LogWeaponHitNotify, Verbose, TEXT("  Playing Montage '%s' on '%s'"), *MontageToPlay->GetName(), *HitCharacter->GetName());
 					AnimInstance->Montage_Play(MontageToPlay, 1.0f);
 				}
-				else if (AnimInstance && AnimInstance->Montage_IsPlaying(MontageToPlay))
-				{
-					UE_LOG(LogWeaponHitNotify, Verbose, TEXT("  Montage '%s' already playing on '%s'"), *MontageToPlay->GetName(), *HitCharacter->GetName());
-				}
-			}
-			else 
-			{ 
-				UE_LOG(LogWeaponHitNotify, Verbose, TEXT("  No Hit Reaction Montage found for '%s'."), *HitCharacter->GetName());
 			}
 
 			// --- 应用伤害 ---
@@ -307,7 +288,6 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 						if (AttackerAttributeSet)
 						{
 							DamageToApply = AttackerAttributeSet->GetAttackPower();
-							UE_LOG(LogWeaponHitNotify, Verbose, TEXT("  Using Attacker's AttackPower: %.1f"), DamageToApply);
 						}
 						else
 						{
@@ -338,50 +318,6 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 				{ 
 					UE_LOG(LogWeaponHitNotify, Warning, TEXT("  Cannot apply damage: OwnerController is NULL."));
 				}
-				else // DamageToApply <= 0.f
-				{
-					UE_LOG(LogWeaponHitNotify, Log, TEXT("  Skipping damage application as calculated damage (%.1f) is zero or less."), DamageToApply);
-				}
-			}
-
-			// --- 检查生命值并处理死亡 (仅在造成伤害后) ---
-			// 注意：如果 TakeDamage 没有正确更新生命值，这里的检查会无效
-			if (AppliedDamage > 0.f) 
-			{
-				UAbilitySystemComponent* HitASC = HitCharacter->FindComponentByClass<UAbilitySystemComponent>(); 
-				if (HitASC)
-				{
-					// 假设敌人和玩家都使用某种 AttributeSet 来获取 Health
-					// 尝试获取通用的 Health 属性，而不是特定于 EnemyAttributeSet
-					// 这需要你的 AttributeSet 基类或接口定义 Health
-					// 如果没有通用接口，需要分别处理 Enemy 和 Player
-					// 这里我们仍然假设 Enemy 使用 EnemyAttributeSet
-					const UEnemyAttributeSet* HitEnemyAttributeSet = HitASC->GetSet<UEnemyAttributeSet>(); 
-					if (HitEnemyAttributeSet)
-					{
-						float CurrentHealth = HitEnemyAttributeSet->GetHealth();
-						UE_LOG(LogWeaponHitNotify, Verbose, TEXT("  %s health after damage: %.1f"), *HitCharacter->GetName(), CurrentHealth);
-
-						if (CurrentHealth <= 0.0f)
-						{
-							UE_LOG(LogWeaponHitNotify, Log, TEXT("  %s health is <= 0. Destroying actor."), *HitCharacter->GetName());
-							if (bDebugTrace && GEngine) GEngine->AddOnScreenDebugMessage(-1, DebugDisplayTime, FColor::Red, FString::Printf(TEXT("%s Died!"), *HitCharacter->GetName()));
-							
-							// TODO: 触发死亡动画/效果，然后延迟销毁
-							// 例如：HitCharacter->PlayAnimMontage(DeathMontage);
-							// FTimerHandle DestroyTimer;
-							// GetWorld()->GetTimerManager().SetTimer(DestroyTimer, [HitCharacter]() { if(HitCharacter) HitCharacter->Destroy(); }, DeathAnimationDuration, false);
-							
-							// 临时：立即销毁
-							HitCharacter->Destroy(); 
-						}
-					}
-					// else { // 可以添加对玩家 AttributeSet 的检查 }
-				}
-				 else
-				{
-					 UE_LOG(LogWeaponHitNotify, Warning, TEXT("  Cannot check health: Hit character '%s' does not have AbilitySystemComponent."), *HitCharacter->GetName());
-				}
 			}
 		}
 	}
@@ -392,5 +328,4 @@ void UWeaponHitNotify::NotifyEnd(USkeletalMeshComponent * MeshComp, UAnimSequenc
 	// 清理状态
 	HitActors.Empty();
 	CachedWeaponMeshComp = nullptr;
-	UE_LOG(LogWeaponHitNotify, Verbose, TEXT("WeaponHitNotify::NotifyEnd - Cleared HitActors and Cache"));
 }

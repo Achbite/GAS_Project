@@ -34,6 +34,7 @@
 #include "EnemyBaseCharacter.generated.h"
 
 class UAbilitySystemComponent;
+class UAnimMontage; // Forward declare UAnimMontage
 
 UCLASS()
 class ANABIOSISORIGIN_API AEnemyBaseCharacter : public ACharacter, public IAbilitySystemInterface
@@ -55,6 +56,10 @@ public:
     /** 重写 TakeDamage 以便与 GAS 属性交互 */
     virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, class AController* EventInstigator, AActor* DamageCauser) override;
     //~ End AActor Interface
+
+    /** 检查角色是否已死亡 */
+    UFUNCTION(BlueprintPure, Category = "Character|State")
+    bool IsDead() const;
 
 protected:
     //~ Begin AActor Interface
@@ -91,6 +96,21 @@ protected:
     /** 从数据表加载的受击蒙太奇 (用于 GetHitReactionMontage) */
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Config|Animation", meta = (AllowPrivateAccess = "true")) // VisibleInstanceOnly 可能更合适
     TObjectPtr<UAnimMontage> LoadedHitReactionMontage; // 加载的受击反应蒙太奇
+
+    /** 从数据表加载的死亡蒙太奇 */
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Config|Animation", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<UAnimMontage> LoadedDeathMontage; // 加载的死亡蒙太奇
+
+    /** 标记角色是否已死亡，防止重复触发死亡逻辑 */
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Character|State")
+    bool bIsDead; // 是否已死亡
+
+    /** 处理角色死亡逻辑 */
+    virtual void HandleDeath();
+
+    /** 死亡蒙太奇播放结束时调用 */
+    UFUNCTION() // UFUNCTION is required for delegate binding
+    virtual void OnDeathMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
     /** 初始化默认能力 */
     virtual void GiveDefaultAbilities();

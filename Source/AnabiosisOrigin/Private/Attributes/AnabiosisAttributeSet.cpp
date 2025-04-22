@@ -24,6 +24,7 @@
 #include "GameplayEffect.h"
 #include "GameplayEffectExtension.h"
 #include "AbilitySystemComponent.h" 
+#include "Characters/AnabiosisOriginCharacter.h" // Include character header
 
 UAnabiosisAttributeSet::UAnabiosisAttributeSet()
 {
@@ -73,13 +74,34 @@ void UAnabiosisAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModC
 {
 	Super::PostGameplayEffectExecute(Data);
 
-	// 在 GameplayEffect 执行后进行 Clamp (确保当前值不超过最大值)
-	// 注意：直接通过 TakeDamage 修改属性不会触发此函数
+	// 在 GameplayEffect 执行后进行 Clamp
 	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
+		// Clamp Health
 		SetHealth(FMath::Clamp(GetHealth(), 0.0f, GetMaxHealth()));
+
+		// 检查是否死亡 (这种方式只对 GE 造成的伤害有效)
+		// 我们已经在 Character 类中通过监听属性变化来处理，这里可以移除或保留作为备用
+		/*
+		if (GetHealth() <= 0.0f)
+		{
+			AActor* TargetActor = nullptr;
+			AController* TargetController = nullptr;
+			if (Data.Target.AbilityActorInfo.IsValid() && Data.Target.AbilityActorInfo->AvatarActor.IsValid())
+			{
+				TargetActor = Data.Target.AbilityActorInfo->AvatarActor.Get();
+				TargetController = Data.Target.AbilityActorInfo->PlayerController.Get();
+			}
+
+			AAnabiosisOriginCharacter* TargetCharacter = Cast<AAnabiosisOriginCharacter>(TargetActor);
+			if (TargetCharacter && !TargetCharacter->IsDead())
+			{
+				TargetCharacter->HandleDeath();
+			}
+		}
+		*/
 	}
-	else if (Data.EvaluatedData.Attribute == GetManaAttribute()) 
+	else if (Data.EvaluatedData.Attribute == GetManaAttribute())
 	{
 		SetMana(FMath::Clamp(GetMana(), 0.0f, GetMaxMana()));
 	}
