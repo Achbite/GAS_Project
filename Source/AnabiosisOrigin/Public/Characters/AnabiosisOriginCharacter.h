@@ -37,7 +37,9 @@ class USpringArmComponent;
 class UCameraComponent;
 class UAttributeSet;
 class UAbilitySystemComponent;
-class UAnimMontage; // Forward declare UAnimMontage
+class UAnimMontage;
+class AWeaponBase; // Forward declare Weapon Actor
+class UDataTable; // Forward declare DataTable
 
 UCLASS(config=Game)
 class AAnabiosisOriginCharacter : public ACharacter, public IAbilitySystemInterface
@@ -54,27 +56,38 @@ private:
 	TObjectPtr<UCameraComponent> FollowCamera; // 跟随相机
 
 protected:
+    // --- Weapon ---
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AttackComponent|Weapon", meta = (AllowPrivateAccess = "true"))
+    TObjectPtr<AWeaponBase> CurrentWeapon; // 当前装备的武器 Actor
+
+    /** 指向武器属性数据表的指针 */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackComponent|Config|Weapon")
+    TObjectPtr<UDataTable> WeaponAttributeDataTable;
+
+    /** 生成并附加武器 */
+    virtual void SpawnAndAttachWeapon(const FName& InWeaponDataRowName, const FName& InAttachSocketName);
+
 	// --- GAS Components ---
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Abilities", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "AttackComponent|Abilities", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent; // 能力系统组件
 
-	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "Abilities", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(VisibleDefaultsOnly, BlueprintReadOnly, Category = "AttackComponent|Abilities", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UAttributeSet> AttributeSet; // 属性集 (基类指针)
 
 	// --- GAS Initialization & State ---
 	/** 攻击能力标签 (用于触发特定攻击能力) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Abilities")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Abilities")
 	FGameplayTag AttackAbilityTag; // 攻击能力标签
 
 	/** 默认赋予的能力列表 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackComponent|Abilities")
 	TArray<TSubclassOf<UGameplayAbility>> DefaultAbilities; // 默认能力列表
 
 	// --- Attribute Data Loading ---
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Config|Attributes")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackComponent|Config|Attributes")
 	TObjectPtr<UDataTable> AttributeDataTable; // 属性数据表
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Config|Attributes")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackComponent|Config|Attributes")
 	FName AttributeDataRowName; // 属性数据表行名
 
 	// --- Character State ---
@@ -83,15 +96,15 @@ protected:
 	EAnabiosisPlayerClass CurrentClass; // 当前职业
 
 	/** 受击时播放的动画蒙太奇 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character|Animation")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackComponent|Animation")
 	TObjectPtr<UAnimMontage> HitReactionMontage; // 受击反应蒙太奇
 
 	/** 从数据表加载的死亡蒙太奇 */
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Character|Animation", meta = (AllowPrivateAccess = "true"))
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AttackComponent|Animation", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UAnimMontage> LoadedDeathMontage; // 加载的死亡蒙太奇
 
 	/** 标记角色是否已死亡，防止重复触发死亡逻辑 */
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Character|State")
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AttackComponent|State")
 	bool bIsDead; // 是否已死亡
 
 public:
@@ -102,7 +115,7 @@ public:
 	//~ End IAbilitySystemInterface
 
 	// --- Getters ---
-	UFUNCTION(BlueprintCallable, Category = "Abilities")
+	UFUNCTION(BlueprintCallable, Category = "AttackComponent|Abilities")
 	FGameplayTag GetAttackAbilityTag() const { return AttackAbilityTag; }
 	
 	FORCEINLINE USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
@@ -112,15 +125,15 @@ public:
 	EAnabiosisPlayerClass GetPlayerClass() const { return CurrentClass; }
 
 	/** 检查角色是否已死亡 */
-	UFUNCTION(BlueprintPure, Category = "Character|State")
+	UFUNCTION(BlueprintPure, Category = "AttackComponent|State")
 	bool IsDead() const;
 
 	/** 返回角色的受击反应蒙太奇 */
-	UFUNCTION(BlueprintCallable, Category = "Animation")
+	UFUNCTION(BlueprintCallable, Category = "AttackComponent|Animation")
 	virtual UAnimMontage* GetHitReactionMontage() const { return HitReactionMontage; }
 
 	// --- Setters & Modifiers ---
-	UFUNCTION(BlueprintCallable, Category = "Abilities")
+	UFUNCTION(BlueprintCallable, Category = "AttackComponent|Abilities")
 	void SetAttackAbilityTag(const FGameplayTag& NewTag);
 	
 	/** 设置角色旋转模式 (是否朝向移动方向，是否使用控制器 Yaw 旋转) */
@@ -131,7 +144,7 @@ public:
 	void SetPlayerClass(EAnabiosisPlayerClass NewClass);
 
 	/** 刷新能力输入绑定 (可能需要审查逻辑) */
-	UFUNCTION(BlueprintCallable, Category = "Abilities")
+	UFUNCTION(BlueprintCallable, Category = "AttackComponent|Abilities")
 	void RefreshAbilityBindings();
 
 	/** 处理角色死亡逻辑 (公开，以便 AttributeSet 可以调用) */

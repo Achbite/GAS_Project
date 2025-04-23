@@ -55,72 +55,79 @@ struct FAnabiosisAttributeData : public FTableRowBase
 	int32 Level = 1; // 等级
 
 	// --- 基础属性 ---
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Primary Attributes", meta = (ClampMin = "1"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Primary Attributes", meta = (ClampMin = "1"))
 	float Strength = 10.0f; // 力量
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Primary Attributes", meta = (ClampMin = "1"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Primary Attributes", meta = (ClampMin = "1"))
 	float Agility = 10.0f; // 敏捷
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Primary Attributes", meta = (ClampMin = "1"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Primary Attributes", meta = (ClampMin = "1"))
 	float Constitution = 10.0f; // 体质
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Primary Attributes", meta = (ClampMin = "1"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Primary Attributes", meta = (ClampMin = "1"))
 	float Intelligence = 10.0f; // 智力
 
 	// --- 战斗属性 (通常是初始值或基础值) ---
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Combat Attributes", meta = (ClampMin = "0"))
 	float Health = 100.0f; // 当前生命值
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Combat Attributes", meta = (ClampMin = "0"))
 	float MaxHealth = 100.0f; // 最大生命值
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Combat Attributes", meta = (ClampMin = "0"))
 	float Mana = 100.0f; // 当前法力值
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Combat Attributes", meta = (ClampMin = "0"))
 	float MaxMana = 100.0f; // 最大法力值
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Combat Attributes", meta = (ClampMin = "0"))
 	float AttackPower = 10.0f; // 攻击力
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Combat Attributes", meta = (ClampMin = "0"))
 	float Defense = 5.0f; // 防御力
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "0.0", ClampMax = "1.0")) // ClampMax 设为 1.0
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Combat Attributes", meta = (ClampMin = "0.0", ClampMax = "1.0")) // ClampMax 设为 1.0
 	float CriticalChance = 0.05f; // 暴击率
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Combat Attributes", meta = (ClampMin = "1.0")) // 暴击倍率至少为 1
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Combat Attributes", meta = (ClampMin = "1.0")) // 暴击倍率至少为 1
 	float CriticalMultiplier = 1.5f; // 暴击倍率
 
 	// --- 衍生属性系数 (可选，如果属性计算在 GE 中处理，则可能不需要) ---
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Coefficients", meta = (ClampMin = "0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Attribute Coefficients", meta = (ClampMin = "0"))
 	float AttackPowerPerStrength = 2.0f; // 每点力量增加的攻击力
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Coefficients", meta = (ClampMin = "0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Attribute Coefficients", meta = (ClampMin = "0"))
 	float MovementSpeedPerAgility = 0.5f; // 每点敏捷增加的移动速度 (注意：移动速度通常不由 AttributeSet 直接管理)
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Coefficients", meta = (ClampMin = "0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Attribute Coefficients", meta = (ClampMin = "0"))
 	float HealthPerConstitution = 10.0f; // 每点体质增加的生命值
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Attribute Coefficients", meta = (ClampMin = "0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Attribute Coefficients", meta = (ClampMin = "0"))
 	float ManaPerIntelligence = 10.0f; // 每点智力增加的法力值
 
 	// --- 成长属性 (可选，升级逻辑可以在其他地方处理) ---
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Growth", meta = (ClampMin = "1.0"))
 	float AttributeGrowthRate = 1.1f; // 基础属性成长率
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Growth", meta = (ClampMin = "1.0"))
 	float HealthGrowthRate = 1.2f; // 生命值成长率
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Growth", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Growth", meta = (ClampMin = "1.0"))
 	float ManaGrowthRate = 1.15f; // 法力值成长率
 
+    // --- 武器 ---
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Weapon", meta = (ToolTip = "武器属性数据表中的行名"))
+    FName WeaponDataRowName = NAME_None;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Weapon", meta = (ToolTip = "武器附加到骨骼上的插槽名称"))
+    FName WeaponAttachSocketName = "hand_rSocket"; // Default socket
+
 	// --- 动画 ---
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Animation")
 	TObjectPtr<UAnimMontage> DeathMontage; // 死亡蒙太奇
 
 	/** 受击时播放的动画蒙太奇 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Animation")
 	TObjectPtr<UAnimMontage> HitReactionMontage; // 受击反应蒙太奇
 
 	FAnabiosisAttributeData() = default; // 使用默认构造函数

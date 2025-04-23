@@ -29,6 +29,7 @@
 
 #include "Controllers/AnabiosisPlayerController.h"
 #include "Characters/AnabiosisOriginCharacter.h" // 包含玩家角色头文件
+#include "Characters/EnemyBaseCharacter.h" // 包含敌人角色头文件
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/Character.h" // 包含基础角色类
@@ -37,6 +38,10 @@
 #include "AbilitySystemComponent.h" // 包含能力系统组件
 #include "InputMappingContext.h" // 包含输入映射上下文
 #include "InputAction.h" // 包含输入 Action
+#include "Kismet/GameplayStatics.h" // For GetAllActorsOfClass
+#include "Kismet/KismetMathLibrary.h" // For LookAtRotation, Angle calculations
+#include "Engine/World.h" // For LineTrace
+#include "DrawDebugHelpers.h" // For debug drawing
 
 AAnabiosisPlayerController::AAnabiosisPlayerController()
 {
@@ -51,6 +56,12 @@ AAnabiosisPlayerController::AAnabiosisPlayerController()
 
 	// 初始化战斗模式状态
 	bIsInCombatMode = false;
+	// 初始化锁定状态
+	LockedTarget = nullptr;
+	bIsTargetLocked = false;
+	MaxLockDistance = 2000.0f;
+	LockConeAngleDegrees = 30.0f;
+	LockInterpolationSpeed = 10.0f;
 }
 
 void AAnabiosisPlayerController::BeginPlay()
@@ -141,6 +152,16 @@ void AAnabiosisPlayerController::Move(const FInputActionValue& Value)
 
 void AAnabiosisPlayerController::Look(const FInputActionValue& Value)
 {
+	// 如果已锁定目标，则由 PlayerTick 处理旋转，忽略或修改此处的输入
+	if (bIsTargetLocked)
+	{
+		// 可选：允许轻微的输入来调整围绕目标的视角，但这会更复杂
+		// FVector2D LookAxisVector = Value.Get<FVector2D>();
+		// AddYawInput(LookAxisVector.X * 0.1f); // Example: Reduced input
+		// AddPitchInput(LookAxisVector.Y * 0.1f);
+		return; // 主要旋转由 Tick 处理
+	}
+
 	// 检查角色是否有效
 	if (!ControlledCharacter) return;
 
@@ -172,7 +193,6 @@ void AAnabiosisPlayerController::StopJumping()
 	}
 }
 
-
 void AAnabiosisPlayerController::ToggleAttackLook(const FInputActionValue& Value)
 {
 	// 检查角色是否有效
@@ -184,6 +204,84 @@ void AAnabiosisPlayerController::ToggleAttackLook(const FInputActionValue& Value
 
 	// 更新角色移动和相机状态
 	UpdateCharacterMovementState(bIsInCombatMode);
+
+	// 根据战斗模式处理锁定逻辑
+	if (bIsInCombatMode)
+	{
+		TryLockTarget(); // 进入战斗模式时尝试锁定
+	}
+	else
+	{
+		UnlockTarget(); // 退出战斗模式时解除锁定
+	}
+}
+
+void AAnabiosisPlayerController::PlayerTick(float DeltaTime)
+{
+	Super::PlayerTick(DeltaTime);
+
+	if (bIsTargetLocked && LockedTarget)
+	{
+		// 检查目标有效性
+		if (LockedTarget->IsDead() || !LockedTarget->GetMesh() || !LockedTarget->GetMesh()->IsVisible())
+		{
+			UE_LOG(LogTemp, Log, TEXT("锁定目标 %s 失效 (死亡或不可见)，解除锁定。"), *LockedTarget->GetName());
+			UnlockTarget();
+			return;
+		}
+
+		// 检查距离
+		float DistanceSq = FVector::DistSquared(ControlledCharacter->GetActorLocation(), LockedTarget->GetActorLocation());
+		if (DistanceSq > FMath::Square(MaxLockDistance))
+		{
+			UE_LOG(LogTemp, Log, TEXT("锁定目标 %s 超出最大距离，解除锁定。"), *LockedTarget->GetName());
+			UnlockTarget();
+			return;
+		}
+
+		// 检查视线 (可选，如果性能允许可以频繁检查)
+		FHitResult HitResult;
+		FVector Start = ControlledCharacter->GetActorLocation();
+		FVector End = LockedTarget->GetActorLocation();
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(ControlledCharacter); // 忽略玩家自身
+		QueryParams.AddIgnoredActor(LockedTarget); // 忽略目标自身 (可选)
+
+		bool bHit = GetWorld()->LineTraceSingleByChannel(
+			HitResult,
+			Start,
+			End,
+			ECC_Visibility, // 使用可见性通道
+			QueryParams
+		);
+
+		// DrawDebugLine(GetWorld(), Start, End, FColor::Yellow, false, 0.1f); // Debug Line
+
+		if (bHit)
+		{
+			// UE_LOG(LogTemp, Log, TEXT("锁定目标 %s 视线被 %s 阻挡，解除锁定。"), *LockedTarget->GetName(), *HitResult.GetActor()->GetName());
+			// UnlockTarget(); // 暂时不因短暂遮挡解除锁定，除非设计需要
+			// return;
+		}
+
+		// 计算目标旋转
+		FRotator TargetRotation = UKismetMathLibrary::FindLookAtRotation(
+			ControlledCharacter->GetActorLocation(),
+			LockedTarget->GetActorLocation() // 可以瞄准目标的特定骨骼或组件位置
+		);
+
+		// 平滑插值到目标旋转
+		FRotator CurrentRotation = GetControlRotation();
+		FRotator NewRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaTime, LockInterpolationSpeed);
+
+		// 只应用 Yaw 和 Pitch，Roll 保持不变
+		SetControlRotation(FRotator(NewRotation.Pitch, NewRotation.Yaw, CurrentRotation.Roll));
+	}
+	else if (bIsTargetLocked && !LockedTarget)
+	{
+		// 如果标记为锁定但目标为空，则解除锁定
+		UnlockTarget();
+	}
 }
 
 // --- 辅助函数 ---
@@ -219,5 +317,111 @@ void AAnabiosisPlayerController::UpdateCharacterMovementState(bool bIsCombatMode
 	float NewArmLength = bIsCombatMode ? CombatCameraArmLength : NormalCameraArmLength;
 	FVector NewOffset = bIsCombatMode ? CombatCameraOffset : FVector::ZeroVector;
 	SetCameraParameters(NewArmLength, NewOffset);
+}
+
+// --- 新增锁定函数 ---
+
+void AAnabiosisPlayerController::TryLockTarget()
+{
+	if (!ControlledCharacter) return;
+
+	UnlockTarget(); // 先清除旧目标
+
+	float MinAngleRad = FMath::DegreesToRadians(LockConeAngleDegrees);
+	float BestScore = -1.0f; // 使用评分系统选择最佳目标
+	AEnemyBaseCharacter* PotentialTarget = nullptr;
+
+	FVector PlayerLocation = ControlledCharacter->GetActorLocation();
+	FVector PlayerForward = GetControlRotation().Vector(); // 使用控制器旋转作为前向
+
+	// 获取世界中的所有敌人
+	TArray<AActor*> FoundEnemies;
+	UGameplayStatics::GetAllActorsOfClass(GetWorld(), AEnemyBaseCharacter::StaticClass(), FoundEnemies);
+
+	for (AActor* Actor : FoundEnemies)
+	{
+		AEnemyBaseCharacter* Enemy = Cast<AEnemyBaseCharacter>(Actor);
+		if (!Enemy || Enemy->IsDead() || !Enemy->GetMesh() || !Enemy->GetMesh()->IsVisible()) // 检查有效性、死亡状态和可见性
+		{
+			continue;
+		}
+
+		FVector EnemyLocation = Enemy->GetActorLocation();
+		FVector DirectionToEnemy = (EnemyLocation - PlayerLocation);
+		float DistanceSq = DirectionToEnemy.SizeSquared();
+
+		// 1. 检查距离
+		if (DistanceSq > FMath::Square(MaxLockDistance))
+		{
+			continue; // 太远
+		}
+
+		DirectionToEnemy.Normalize();
+
+		// 2. 检查角度
+		float AngleRad = FMath::Acos(FVector::DotProduct(PlayerForward, DirectionToEnemy));
+		if (AngleRad > MinAngleRad)
+		{
+			continue; // 在锁定锥形外
+		}
+
+		// 3. 检查视线
+		FHitResult HitResult;
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(ControlledCharacter); // 忽略玩家
+		QueryParams.AddIgnoredActor(Enemy); // 忽略敌人自身
+
+		bool bHit = GetWorld()->LineTraceSingleByChannel(
+			HitResult,
+			PlayerLocation,
+			EnemyLocation,
+			ECC_Visibility, // 可见性通道
+			QueryParams
+		);
+
+		// DrawDebugLine(GetWorld(), PlayerLocation, EnemyLocation, bHit ? FColor::Red : FColor::Green, false, 2.0f); // Debug Line
+
+		if (bHit)
+		{
+			continue; // 视线被阻挡
+		}
+
+		// 计算评分 (距离越近、角度越小，得分越高)
+		// 简单的评分：角度越小越好 (1 - 角度/最大角度)，距离越近越好 (1 - 距离/最大距离)
+		float AngleScore = 1.0f - (AngleRad / MinAngleRad);
+		float DistanceScore = 1.0f - (FMath::Sqrt(DistanceSq) / MaxLockDistance);
+		float CurrentScore = AngleScore * 0.6f + DistanceScore * 0.4f; // 角度权重更高
+
+		if (CurrentScore > BestScore)
+		{
+			BestScore = CurrentScore;
+			PotentialTarget = Enemy;
+		}
+	}
+
+	if (PotentialTarget)
+	{
+		LockedTarget = PotentialTarget;
+		bIsTargetLocked = true;
+		UE_LOG(LogTemp, Log, TEXT("已锁定目标: %s"), *LockedTarget->GetName());
+		// 可选：立即将视角转向目标
+		// FRotator TargetRotation = UKismetMathLibrary::FindLookAtRotation(PlayerLocation, LockedTarget->GetActorLocation());
+		// SetControlRotation(TargetRotation);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("未找到可锁定的目标。"));
+	}
+}
+
+void AAnabiosisPlayerController::UnlockTarget()
+{
+	if (bIsTargetLocked)
+	{
+		UE_LOG(LogTemp, Log, TEXT("解除目标锁定 (之前目标: %s)"), LockedTarget ? *LockedTarget->GetName() : TEXT("无"));
+	}
+	LockedTarget = nullptr;
+	bIsTargetLocked = false;
+	// 可选：重置相机设置或旋转模式，如果锁定改变了它们
 }
 

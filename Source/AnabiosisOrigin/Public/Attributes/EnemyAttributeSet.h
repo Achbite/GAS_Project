@@ -42,29 +42,29 @@ public:
 	UEnemyAttributeSet();
 
 	// --- 基础/状态属性 ---
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Base")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Base")
 	FGameplayAttributeData Health; // 当前生命值
 	ATTRIBUTE_ACCESSORS(UEnemyAttributeSet, Health)
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Base")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Base")
 	FGameplayAttributeData MaxHealth; // 最大生命值
 	ATTRIBUTE_ACCESSORS(UEnemyAttributeSet, MaxHealth)
 
 	// --- 战斗属性 ---
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Combat")
 	FGameplayAttributeData AttackPower; // 攻击力
 	ATTRIBUTE_ACCESSORS(UEnemyAttributeSet, AttackPower)
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Combat")
 	FGameplayAttributeData Defense; // 防御力
 	ATTRIBUTE_ACCESSORS(UEnemyAttributeSet, Defense)
 
 	// --- AI 相关属性 ---
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|AI")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|AI")
 	FGameplayAttributeData DetectionRange; // 侦测范围
 	ATTRIBUTE_ACCESSORS(UEnemyAttributeSet, DetectionRange)
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|AI")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|AI")
 	FGameplayAttributeData AggroValue; // 仇恨值
 	ATTRIBUTE_ACCESSORS(UEnemyAttributeSet, AggroValue)
 

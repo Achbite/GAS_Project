@@ -44,53 +44,53 @@ public:
 	UAnabiosisAttributeSet();
 
 	// --- 基础属性 ---
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Base")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Base")
 	FGameplayAttributeData Strength; // 力量
 	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Strength)
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Base")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Base")
 	FGameplayAttributeData Agility; // 敏捷
 	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Agility)
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Base")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Base")
 	FGameplayAttributeData Constitution; // 体质
 	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Constitution)
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Base")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Base")
 	FGameplayAttributeData Intelligence; // 智力
 	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Intelligence)
 
 	// --- 状态属性 ---
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Status")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Status")
 	FGameplayAttributeData Health; // 当前生命值
 	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Health)
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Status")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Status")
 	FGameplayAttributeData MaxHealth; // 最大生命值
 	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, MaxHealth)
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Status")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Status")
 	FGameplayAttributeData Mana; // 当前法力值
 	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Mana)
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Status")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Status")
 	FGameplayAttributeData MaxMana; // 最大法力值
 	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, MaxMana)
 
 	// --- 战斗属性 ---
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Combat")
 	FGameplayAttributeData AttackPower; // 攻击力
 	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, AttackPower)
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Combat")
 	FGameplayAttributeData Defense; // 防御力
 	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, Defense)
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Combat")
 	FGameplayAttributeData CriticalChance; // 暴击率
 	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, CriticalChance)
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Combat")
+	UPROPERTY(BlueprintReadOnly, Category = "AttackComponent|Combat")
 	FGameplayAttributeData CriticalMultiplier; // 暴击倍率
 	ATTRIBUTE_ACCESSORS(UAnabiosisAttributeSet, CriticalMultiplier)
 

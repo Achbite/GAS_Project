@@ -39,6 +39,7 @@
 class UInputMappingContext;
 class UInputAction;
 class AAnabiosisOriginCharacter;
+class AEnemyBaseCharacter; // Forward declaration for enemy character
 
 UCLASS()
 class ANABIOSISORIGIN_API AAnabiosisPlayerController : public APlayerController
@@ -83,6 +84,22 @@ protected:
     // 当前视角状态
     bool bIsInCombatMode;
 
+    /** 目标锁定相关 */
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "战斗|锁定")
+    AEnemyBaseCharacter* LockedTarget; // 当前锁定的目标
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "战斗|锁定")
+    bool bIsTargetLocked; // 是否已锁定目标
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "战斗|锁定")
+    float MaxLockDistance = 2000.0f; // 最大锁定距离
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "战斗|锁定")
+    float LockConeAngleDegrees = 30.0f; // 锁定锥形半角 (度)
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "战斗|锁定")
+    float LockInterpolationSpeed = 10.0f; // 锁定视角插值速度
+
     /** 移动相关参数 */
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Movement")
     float BaseMovementSpeed = 600.0f;
@@ -109,6 +126,7 @@ protected:
 protected:
     virtual void BeginPlay() override;
     virtual void SetupInputComponent() override;
+    virtual void PlayerTick(float DeltaTime) override; // Override PlayerTick
 
     // 输入处理函数
     void Move(const FInputActionValue& Value);
@@ -120,5 +138,11 @@ protected:
 private:
     UPROPERTY()
     AAnabiosisOriginCharacter* ControlledCharacter;
+
+    /** 尝试查找并锁定目标 */
+    void TryLockTarget();
+
+    /** 解除目标锁定 */
+    void UnlockTarget();
 };
 

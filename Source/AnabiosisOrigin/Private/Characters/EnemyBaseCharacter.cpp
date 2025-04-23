@@ -40,6 +40,12 @@
 #include "AI/EnemyAIController.h"   // 包含 AI 控制器以便通知 (如果需要)
 #include "GameplayTagsManager.h" // Include for Gameplay Tags
 #include "Abilities/GameplayAbility.h" // Include for GameplayAbility
+#include "Items/WeaponBase.h" // Include Weapon Actor
+#include "Data/WeaponAttributeData.h" // Include Weapon Data Struct
+#include "Engine/DataTable.h" // Include DataTable
+#include "AbilitySystemComponent.h" // Needed for applying GE
+#include "GameFramework/CharacterMovementComponent.h" // Needed for GetMesh()
+#include "UObject/UObjectGlobals.h" // Needed for LoadSynchronous
 
 #define COLLISION_ENEMY ECC_GameTraceChannel1
 
@@ -92,6 +98,8 @@ AEnemyBaseCharacter::AEnemyBaseCharacter()
     // 设置数据表和行名默认值 (可选)
     AttributeDataTable = nullptr;
     AttributeDataRowName = NAME_None;
+    WeaponAttributeDataTable = nullptr; // Initialize weapon data table pointer
+    CurrentWeapon = nullptr; // Initialize weapon pointer
 
     LoadedHitReactionMontage = nullptr; // Initialize the pointer
     LoadedDeathMontage = nullptr; // Initialize death montage pointer
@@ -108,6 +116,7 @@ void AEnemyBaseCharacter::PostInitializeComponents()
     {
         InitializeAttributesFromDataTable();
         // 注意：AiBehaviorComponent 的初始化现在在 InitializeAttributesFromDataTable 内部完成
+        // 武器生成也移到 InitializeAttributesFromDataTable 之后
     }
 }
 
@@ -210,6 +219,13 @@ void AEnemyBaseCharacter::InitializeAttributesFromDataTable()
     // -----------------------
 
     UE_LOG(LogTemp, Log, TEXT("Enemy %s finished initializing attributes, montages, abilities, and AI behavior from DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
+
+    // --- 生成并附加武器 (在属性初始化之后) ---
+    if (GetLocalRole() == ROLE_Authority) // 确保只在服务器生成
+    {
+        SpawnAndAttachWeapon(Row->WeaponDataRowName, Row->WeaponAttachSocketName);
+    }
+    // --------------------------------------
 
     // 应用其他从数据表读取的配置，例如 AI 参数 (如果需要)
     // GetCharacterMovement()->MaxWalkSpeed = ... Row->MovementSpeed ... (如果数据表中有)
@@ -401,6 +417,15 @@ void AEnemyBaseCharacter::HandleDeath()
 	OnDeathDelegate.Broadcast();
 	// --------------------
 
+	// --- 销毁武器 Actor ---
+	if (CurrentWeapon)
+	{
+		CurrentWeapon->Destroy();
+		CurrentWeapon = nullptr; // 清除指针
+		UE_LOG(LogTemp, Log, TEXT("  Destroyed CurrentWeapon for %s."), *GetName());
+	}
+	// --------------------
+
 	// 停止移动
 	if (GetCharacterMovement())
 	{
@@ -456,7 +481,8 @@ void AEnemyBaseCharacter::OnDeathMontageEnded(UAnimMontage* Montage, bool bInter
 {
 	// 保留蒙太奇结束和销毁日志
 	UE_LOG(LogTemp, Log, TEXT("EnemyBaseCharacter %s death montage ended (Interrupted: %s). Destroying Actor."), *GetName(), bInterrupted ? TEXT("Yes") : TEXT("No"));
-	Destroy();
+	// Actor 的 Destroy 会自动处理其拥有的、未被手动销毁的组件
+	Destroy(); 
 }
 
 void AEnemyBaseCharacter::ApplyDefaultEffects()
@@ -476,6 +502,110 @@ void AEnemyBaseCharacter::ApplyDefaultEffects()
                 AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*NewHandle.Data.Get());
             }
         }
+    }
+}
+
+void AEnemyBaseCharacter::SpawnAndAttachWeapon(const FName& InWeaponDataRowName, const FName& InAttachSocketName)
+{
+    if (CurrentWeapon) // 如果已有武器，先销毁
+    {
+        CurrentWeapon->Destroy();
+        CurrentWeapon = nullptr;
+    }
+
+    if (!WeaponAttributeDataTable)
+    {
+        UE_LOG(LogTemp, Error, TEXT("%s: WeaponAttributeDataTable is not set! Cannot spawn weapon."), *GetName());
+        return;
+    }
+    if (InWeaponDataRowName == NAME_None)
+    {
+        UE_LOG(LogTemp, Warning, TEXT("%s: WeaponDataRowName is None. No weapon will be spawned."), *GetName());
+        return;
+    }
+    if (InAttachSocketName == NAME_None)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: WeaponAttachSocketName is None. Cannot attach weapon correctly."), *GetName());
+        // Optionally default to a socket or don't attach
+        // return;
+	}
+
+
+    const FString ContextString(TEXT("Loading Weapon Attributes"));
+    FWeaponAttributeData* WeaponRow = WeaponAttributeDataTable->FindRow<FWeaponAttributeData>(InWeaponDataRowName, ContextString);
+
+    if (!WeaponRow)
+    {
+        UE_LOG(LogTemp, Error, TEXT("%s: Cannot find row '%s' in WeaponAttributeDataTable '%s'!"), *GetName(), *InWeaponDataRowName.ToString(), *WeaponAttributeDataTable->GetName());
+        return;
+    }
+
+    // --- 使用 TSoftClassPtr 加载类 ---
+    if (WeaponRow->WeaponActorClassPtr.IsNull())
+    {
+        UE_LOG(LogTemp, Error, TEXT("%s: WeaponActorClassPtr is not set or is null in WeaponAttributeData row '%s'!"), *GetName(), *InWeaponDataRowName.ToString());
+        return;
+    }
+
+    // 同步加载类资源
+    TSubclassOf<AWeaponBase> LoadedWeaponClass = WeaponRow->WeaponActorClassPtr.LoadSynchronous();
+
+    if (!LoadedWeaponClass)
+    {
+        UE_LOG(LogTemp, Error, TEXT("%s: Failed to load WeaponActorClassPtr from path %s in row '%s'!"), *GetName(), *WeaponRow->WeaponActorClassPtr.ToString(), *InWeaponDataRowName.ToString());
+        return;
+    }
+    // ---------------------------------
+
+    UWorld* World = GetWorld();
+    if (!World) return;
+
+    // 设置生成参数
+    FActorSpawnParameters SpawnParams;
+    SpawnParams.Owner = this;
+    SpawnParams.Instigator = GetInstigator();
+    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn; // 总是生成，稍后附加
+
+    // --- 使用加载后的类生成武器 Actor ---
+    CurrentWeapon = World->SpawnActor<AWeaponBase>(LoadedWeaponClass, GetActorLocation(), GetActorRotation(), SpawnParams);
+    // -----------------------------------
+
+    if (CurrentWeapon)
+    {
+        UE_LOG(LogTemp, Log, TEXT("%s spawned weapon: %s (from class %s)"), *GetName(), *CurrentWeapon->GetName(), *LoadedWeaponClass->GetName());
+
+        // 附加到骨骼插槽
+        if (GetMesh() && InAttachSocketName != NAME_None)
+        {
+            CurrentWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, InAttachSocketName);
+            UE_LOG(LogTemp, Log, TEXT("  Attached %s to socket %s"), *CurrentWeapon->GetName(), *InAttachSocketName.ToString());
+        }
+        else {
+             UE_LOG(LogTemp, Warning, TEXT("  Could not attach %s. Mesh invalid or SocketName is None."), *CurrentWeapon->GetName());
+        }
+
+
+        // 应用属性效果 (如果定义了)
+        if (WeaponRow->GrantedAttributesEffect && AbilitySystemComponent)
+        {
+            FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
+            EffectContext.AddSourceObject(CurrentWeapon); // 将武器设为效果来源
+
+            FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(WeaponRow->GrantedAttributesEffect, 1, EffectContext); // Level 1
+            if (SpecHandle.IsValid())
+            {
+                AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+                UE_LOG(LogTemp, Log, TEXT("  Applied GrantedAttributesEffect: %s"), *WeaponRow->GrantedAttributesEffect->GetName());
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("  Failed to create spec for GrantedAttributesEffect: %s"), *WeaponRow->GrantedAttributesEffect->GetName());
+            }
+        }
+    }
+    else
+    {
+        UE_LOG(LogTemp, Error, TEXT("%s failed to spawn weapon actor from loaded class %s!"), *GetName(), *LoadedWeaponClass->GetName());
     }
 }
 
