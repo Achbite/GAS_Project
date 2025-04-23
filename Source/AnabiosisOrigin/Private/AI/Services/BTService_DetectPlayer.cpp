@@ -122,7 +122,7 @@ void UBTService_DetectPlayer::TickNode(UBehaviorTreeComponent& OwnerComp, uint8*
 
 	// 2. 获取当前状态和目标 (确保使用缓存的 Blackboard)
 	FName CurrentStateName = CachedBlackboardComp->GetValueAsName(AIStateKey.SelectedKeyName);
-	AActor* CurrentTarget = Cast<AActor>(CachedBlackboardComp->GetValueAsObject(TargetActorKey.SelectedKeyName));
+	AActor* CurrentTargetActor = Cast<AActor>(CachedBlackboardComp->GetValueAsObject(TargetActorKey.SelectedKeyName)); // 重命名避免与类成员冲突
 	ACharacter* PlayerCharacter = UGameplayStatics::GetPlayerCharacter(GetWorld(), 0); // 获取第一个玩家
 
 	// 3. 检查玩家是否存在且有效
@@ -142,59 +142,94 @@ void UBTService_DetectPlayer::TickNode(UBehaviorTreeComponent& OwnerComp, uint8*
 	}
 
 	// 4. 主要逻辑：根据当前状态决定行为
-	bool bPlayerDetected = CachedAiBehaviorComp->IsInDetectionRange(PlayerCharacter) && HasLineOfSight(CachedOwnerController, PlayerCharacter);
+	bool bPlayerInDetectionRange = CachedAiBehaviorComp->IsInDetectionRange(PlayerCharacter);
 	bool bPlayerInChaseRange = CachedAiBehaviorComp->IsInChaseRange(PlayerCharacter);
-	bool bHasLineOfSightToPlayer = HasLineOfSight(CachedOwnerController, PlayerCharacter); // 单独获取视线状态
+	bool bPlayerInAttackRange = CachedAiBehaviorComp->IsInAttackRange(PlayerCharacter); // 获取攻击范围状态
+	bool bHasLineOfSightToPlayer = HasLineOfSight(CachedOwnerController, PlayerCharacter);
 
-	if (CurrentStateName == AI_STATE_TAG_NAME("AI.State.Chasing") || CurrentStateName == AI_STATE_TAG_NAME("AI.State.Attacking"))
+	// --- 组合检测条件 ---
+	bool bCanSensePlayer = bPlayerInDetectionRange && bHasLineOfSightToPlayer; // 能感知到玩家 (用于开始追击)
+	bool bCanEngagePlayer = bPlayerInChaseRange && bHasLineOfSightToPlayer;   // 能与玩家交战 (用于保持追击/攻击)
+	bool bCanAttackPlayer = bPlayerInAttackRange && bHasLineOfSightToPlayer;  // 能攻击玩家 (用于切换到攻击)
+	// --------------------
+
+	if (CurrentStateName == AI_STATE_TAG_NAME("AI.State.Chasing"))
 	{
-		// 当前在追击或攻击
-		bool bTargetIsPlayer = (CurrentTarget == PlayerCharacter);
-
-		// --- 添加详细日志 ---
-		UE_LOG(LogTemp, Verbose, TEXT("%s: In Chasing/Attacking State. TargetIsPlayer: %s, InChaseRange: %s, HasLoS: %s"),
-			*CachedOwnerCharacter->GetName(),
-			bTargetIsPlayer ? TEXT("true") : TEXT("false"),
-			bPlayerInChaseRange ? TEXT("true") : TEXT("false"),
-			bHasLineOfSightToPlayer ? TEXT("true") : TEXT("false"));
-		// --------------------
-
-		if (bTargetIsPlayer && bPlayerInChaseRange && bHasLineOfSightToPlayer)
+		// 当前在追击
+		if (CurrentTargetActor == PlayerCharacter)
 		{
-			// 目标有效且在范围内/视线内，保持当前状态 (由BT其他部分决定是 Chasing 还是 Attacking)
-			// UE_LOG(LogTemp, Verbose, TEXT("%s: Target %s still valid in chase/attack."), *CachedOwnerCharacter->GetName(), *PlayerCharacter->GetName());
+			if (bCanAttackPlayer) // 如果能攻击玩家
+			{
+				// 切换到攻击状态
+				CachedBlackboardComp->SetValueAsName(AIStateKey.SelectedKeyName, AI_STATE_TAG_NAME("AI.State.Attacking"));
+				UE_LOG(LogTemp, Log, TEXT("%s: Target in attack range, switching to Attacking state."), *CachedOwnerCharacter->GetName());
+			}
+			else if (!bCanEngagePlayer) // 如果不能交战 (超出追击范围或丢失视线)
+			{
+				// 目标丢失，返回
+				FString LostReason = !bPlayerInChaseRange ? TEXT("Out of chase range; ") : TEXT("Lost line of sight; ");
+				UE_LOG(LogTemp, Log, TEXT("%s: Lost target %s while chasing. Reason: %s Returning home."),
+					*CachedOwnerCharacter->GetName(), *PlayerCharacter->GetName(), *LostReason);
+				CachedBlackboardComp->SetValueAsObject(TargetActorKey.SelectedKeyName, nullptr);
+				CachedBlackboardComp->SetValueAsName(AIStateKey.SelectedKeyName, AI_STATE_TAG_NAME("AI.State.Returning"));
+			}
+			// else: 仍在追击范围内但不在攻击范围内，保持 Chasing 状态
 		}
-		else
+		else // 目标不是玩家了 (理论上不应发生，除非外部改变了 TargetActor)
 		{
-			// 目标丢失 (超出范围、丢失视线或目标改变/无效)
-			// --- 添加目标丢失原因日志 ---
-			FString LostReason = TEXT("");
-			if (!bTargetIsPlayer) LostReason += TEXT("Target changed; ");
-			if (!bPlayerInChaseRange) LostReason += TEXT("Out of chase range; ");
-			if (!bHasLineOfSightToPlayer) LostReason += TEXT("Lost line of sight; ");
-			UE_LOG(LogTemp, Log, TEXT("%s: Lost target %s. Reason: %s Returning home."),
-				*CachedOwnerCharacter->GetName(),
-				PlayerCharacter ? *PlayerCharacter->GetName() : TEXT("NULL"),
-				*LostReason);
-			// ---------------------------
-
+			UE_LOG(LogTemp, Warning, TEXT("%s: Target changed unexpectedly while chasing. Returning home."), *CachedOwnerCharacter->GetName());
 			CachedBlackboardComp->SetValueAsObject(TargetActorKey.SelectedKeyName, nullptr);
-			// 根据行为类型决定是返回还是搜索等，这里先设置为 Returning
+			CachedBlackboardComp->SetValueAsName(AIStateKey.SelectedKeyName, AI_STATE_TAG_NAME("AI.State.Returning"));
+		}
+	}
+	else if (CurrentStateName == AI_STATE_TAG_NAME("AI.State.Attacking"))
+	{
+		// 当前在攻击
+		if (CurrentTargetActor == PlayerCharacter)
+		{
+			if (!bCanAttackPlayer) // 如果不能攻击玩家了
+			{
+				if (bCanEngagePlayer) // 但仍在交战范围内
+				{
+					// 切换回追击状态
+					CachedBlackboardComp->SetValueAsName(AIStateKey.SelectedKeyName, AI_STATE_TAG_NAME("AI.State.Chasing"));
+					UE_LOG(LogTemp, Log, TEXT("%s: Target left attack range but still in chase range, switching back to Chasing state."), *CachedOwnerCharacter->GetName());
+				}
+				else // 连交战范围都出了
+				{
+					// 目标丢失，返回
+					FString LostReason = !bPlayerInChaseRange ? TEXT("Out of chase range; ") : TEXT("Lost line of sight; ");
+					UE_LOG(LogTemp, Log, TEXT("%s: Lost target %s while attacking. Reason: %s Returning home."),
+						*CachedOwnerCharacter->GetName(), *PlayerCharacter->GetName(), *LostReason);
+					CachedBlackboardComp->SetValueAsObject(TargetActorKey.SelectedKeyName, nullptr);
+					CachedBlackboardComp->SetValueAsName(AIStateKey.SelectedKeyName, AI_STATE_TAG_NAME("AI.State.Returning"));
+				}
+			}
+			// else: 仍在攻击范围内，保持 Attacking 状态 (由 BT 决定是否执行攻击动作)
+		}
+		else // 目标不是玩家了
+		{
+			UE_LOG(LogTemp, Warning, TEXT("%s: Target changed unexpectedly while attacking. Returning home."), *CachedOwnerCharacter->GetName());
+			CachedBlackboardComp->SetValueAsObject(TargetActorKey.SelectedKeyName, nullptr);
 			CachedBlackboardComp->SetValueAsName(AIStateKey.SelectedKeyName, AI_STATE_TAG_NAME("AI.State.Returning"));
 		}
 	}
 	else // 非追击/攻击状态 (Idle, Patrolling, Returning)
 	{
+		// --- 将 bPlayerDetected 的计算移到日志之前 ---
+		bool bPlayerDetected = bCanSensePlayer; // 使用组合条件
+		// ---------------------------------------------
+
 		// --- 添加检测日志 ---
 		UE_LOG(LogTemp, Verbose, TEXT("%s: In Non-Chasing State (%s). PlayerDetected: %s (InDetectRange: %s, HasLoS: %s)"),
 			*CachedOwnerCharacter->GetName(),
 			*CurrentStateName.ToString(),
-			bPlayerDetected ? TEXT("true") : TEXT("false"),
-			CachedAiBehaviorComp->IsInDetectionRange(PlayerCharacter) ? TEXT("true") : TEXT("false"), // Log individual components of detection
+			bPlayerDetected ? TEXT("true") : TEXT("false"), // 现在可以使用 bPlayerDetected
+			bPlayerInDetectionRange ? TEXT("true") : TEXT("false"), // Log individual components of detection
 			bHasLineOfSightToPlayer ? TEXT("true") : TEXT("false"));
 		// --------------------
 
-		if (bPlayerDetected)
+		if (bPlayerDetected) // 使用 bPlayerDetected
 		{
 			// 发现玩家！设置目标并切换到追击状态
 			CachedBlackboardComp->SetValueAsObject(TargetActorKey.SelectedKeyName, PlayerCharacter);
@@ -205,10 +240,10 @@ void UBTService_DetectPlayer::TickNode(UBehaviorTreeComponent& OwnerComp, uint8*
 		{
 			// 未发现玩家或玩家不在视线/范围内
 			// 如果之前有目标 (例如刚从追击切换过来)，则清除目标
-			if (CurrentTarget != nullptr)
+			if (CurrentTargetActor != nullptr)
 			{
 				CachedBlackboardComp->SetValueAsObject(TargetActorKey.SelectedKeyName, nullptr);
-				UE_LOG(LogTemp, Verbose, TEXT("%s: Target cleared (was %s)."), *CachedOwnerCharacter->GetName(), *CurrentTarget->GetName());
+				UE_LOG(LogTemp, Verbose, TEXT("%s: Target cleared (was %s)."), *CachedOwnerCharacter->GetName(), *CurrentTargetActor->GetName());
 				// 不需要改变状态，让行为树的其他部分处理 Idle/Patrolling/Returning 逻辑
 			}
 		}

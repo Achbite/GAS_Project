@@ -38,6 +38,7 @@
 #include "Animation/AnimInstance.h" // Include for AnimInstance
 #include "AI/AiBehaviorComponent.h" // 包含 AI 行为组件以便查找
 #include "AI/EnemyAIController.h"   // 包含 AI 控制器以便通知 (如果需要)
+#include "GameplayTagsManager.h" // Include for Gameplay Tags
 
 #define COLLISION_ENEMY ECC_GameTraceChannel1
 
@@ -286,6 +287,61 @@ UAnimMontage* AEnemyBaseCharacter::GetHitReactionMontage() const
     return LoadedHitReactionMontage;
 }
 
+bool AEnemyBaseCharacter::IsStunned() const
+{
+	// 检查 AbilitySystemComponent 是否有效以及是否拥有 StunnedTag
+	return AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(StunnedTag);
+}
+
+// --- 实现受击处理函数 (BlueprintNativeEvent 的 C++ 部分) ---
+void AEnemyBaseCharacter::HandleHitReaction_Implementation(AActor* DamageCauser)
+{
+	if (IsDead() || IsStunned()) // 如果已死亡或已处于受击状态，则不处理
+	{
+		return;
+	}
+
+	// 播放受击蒙太奇
+	UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
+	if (AnimInstance && LoadedHitReactionMontage)
+	{
+		// 停止当前可能在播放的其他蒙太奇 (可选，取决于设计)
+		// AnimInstance->Montage_Stop(0.1f);
+
+		const float PlayRate = 1.0f;
+		AnimInstance->Montage_Play(LoadedHitReactionMontage, PlayRate);
+		UE_LOG(LogTemp, Verbose, TEXT("%s playing HitReactionMontage: %s"), *GetName(), *LoadedHitReactionMontage->GetName());
+
+		// 可选：根据伤害来源调整朝向
+		if (DamageCauser)
+		{
+			FVector DirectionToCauser = (DamageCauser->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+			FRotator LookAtRotation = DirectionToCauser.Rotation();
+			// 可以平滑转向或立即设置
+			SetActorRotation(LookAtRotation);
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s cannot play HitReactionMontage. AnimInstance: %p, Montage: %p"),
+			*GetName(), AnimInstance, LoadedHitReactionMontage.Get());
+	}
+
+	// 应用受击效果 (例如，施加 StunnedTag) - 这通常由伤害 GE 完成，但也可以在这里补充
+	if (HitReactionEffect && AbilitySystemComponent)
+	{
+		FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
+		EffectContext.AddSourceObject(DamageCauser ? DamageCauser : this); // 设置伤害来源
+		FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(HitReactionEffect, 1, EffectContext);
+		if (SpecHandle.IsValid())
+		{
+			AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+			UE_LOG(LogTemp, Verbose, TEXT("%s applied HitReactionEffect."), *GetName());
+		}
+	}
+}
+// ---------------------------------------------------------
+
 void AEnemyBaseCharacter::PossessedBy(AController* NewController)
 {
     Super::PossessedBy(NewController);
@@ -293,6 +349,16 @@ void AEnemyBaseCharacter::PossessedBy(AController* NewController)
     if (AbilitySystemComponent)
     {
         AbilitySystemComponent->InitAbilityActorInfo(this, this);
+
+        // --- 初始化 StunnedTag ---
+        // 确保 StunnedTag 有效，如果未在编辑器中设置，则使用默认值
+        if (!StunnedTag.IsValid())
+        {
+            StunnedTag = FGameplayTag::RequestGameplayTag(FName("AI.State.Stunned"));
+            UE_LOG(LogTemp, Warning, TEXT("%s: StunnedTag was invalid, using default 'AI.State.Stunned'."), *GetName());
+        }
+        // -------------------------
+
         GiveDefaultAbilities();
         ApplyDefaultEffects();
     }
@@ -305,6 +371,14 @@ bool AEnemyBaseCharacter::IsDead() const
 
 float AEnemyBaseCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
+	// --- 添加伤害免疫检查 (未来实现) ---
+	// if (AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("Player.State.DamageImmune"))))
+	// {
+	//     UE_LOG(LogTemp, Verbose, TEXT("%s is immune to damage."), *GetName());
+	//     return 0.f;
+	// }
+	// ------------------------------------
+
 	if (IsDead()) // 如果已死亡，不再接受伤害
 	{
 		return 0.f;
@@ -314,19 +388,39 @@ float AEnemyBaseCharacter::TakeDamage(float DamageAmount, FDamageEvent const& Da
 
 	if (ActualDamage > 0.f && AttributeSet && AbilitySystemComponent)
 	{
+		// --- 注意：伤害计算和属性修改最好通过 GameplayEffect 处理 ---
+		// 这里的直接修改仅作为示例，推荐使用 GE 来应用伤害和触发后续效果
 		const float OldHealth = AttributeSet->GetHealth();
-		float NewHealth = OldHealth - ActualDamage;
+		float NewHealth = OldHealth - ActualDamage; // 简化计算，未考虑防御等
 		NewHealth = FMath::Clamp(NewHealth, 0.0f, AttributeSet->GetMaxHealth());
-		AttributeSet->SetHealth(NewHealth);
+		AttributeSet->SetHealth(NewHealth); // 直接设置属性
 
-		// 保留伤害日志
-		UE_LOG(LogTemp, Log, TEXT("EnemyBaseCharacter %s Took %.1f damage. Health changed from %.1f to %.1f"), *GetName(), ActualDamage, OldHealth, NewHealth);
+		UE_LOG(LogTemp, Log, TEXT("%s Took %.1f damage. Health changed from %.1f to %.1f"), *GetName(), ActualDamage, OldHealth, NewHealth);
+
+		// --- 触发受击事件标签 ---
+		FGameplayEventData Payload;
+		Payload.Instigator = EventInstigator ? EventInstigator : GetController();
+		Payload.Target = this;
+		Payload.EventMagnitude = ActualDamage;
+		Payload.OptionalObject = DamageCauser;
+		// 如果需要传递伤害类型，可以考虑使用 OptionalObject2 或 ContextHandle
+		// Payload.OptionalObject2 = DamageEvent.DamageTypeClass; // 示例
+
+		AbilitySystemComponent->HandleGameplayEvent(FGameplayTag::RequestGameplayTag(FName("Event.Damage.HitReact")), &Payload);
+		UE_LOG(LogTemp, Verbose, TEXT("%s sent GameplayEvent 'Event.Damage.HitReact'"), *GetName());
+		// ------------------------
 
 		// 检查是否死亡
 		if (NewHealth <= 0.0f)
 		{
-			HandleDeath(); // HandleDeath 内部有日志
+			HandleDeath();
 		}
+		// --- 移除这里的 HandleHitReaction 调用，改为由 GE 或 GameplayEvent 触发 ---
+		// else
+		// {
+		//     HandleHitReaction(DamageCauser); // 处理受击反应
+		// }
+		// --------------------------------------------------------------------
 	}
 	else if (ActualDamage > 0.f)
 	{

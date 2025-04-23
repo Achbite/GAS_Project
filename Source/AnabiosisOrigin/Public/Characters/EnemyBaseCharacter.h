@@ -47,6 +47,7 @@
 #include "Engine/DataTable.h" // 包含数据表头文件
 #include "Attributes/EnemyAttributeSet.h" // 包含 EnemyAttributeSet 的完整头文件
 #include "Animation/AnimMontage.h" // Ensure AnimMontage is included
+#include "GameplayTagContainer.h" // Include GameplayTagContainer
 #include "EnemyBaseCharacter.generated.h"
 
 class UAbilitySystemComponent;
@@ -89,6 +90,14 @@ public:
     UFUNCTION(BlueprintPure, Category = "Character|State")
     bool IsDead() const;
 
+    /** 检查角色是否处于受击/眩晕状态 */
+    UFUNCTION(BlueprintPure, Category = "Character|State")
+    bool IsStunned() const;
+
+    /** 处理受击事件 (通常由 GE 触发) */
+    UFUNCTION(BlueprintNativeEvent, BlueprintCallable, Category = "Character|Combat")
+    void HandleHitReaction(AActor* DamageCauser); // 添加伤害来源参数
+
 protected:
     //~ Begin AActor Interface
     virtual void PostInitializeComponents() override; 
@@ -116,6 +125,10 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities")
     TArray<TSubclassOf<UGameplayEffect>> DefaultEffects; // 默认效果列表
 
+    /** 应用于受击时的 GameplayEffect (例如，施加 Stunned 标签) */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities|Combat")
+    TSubclassOf<UGameplayEffect> HitReactionEffect; // 受击反应效果
+
     // --- Attribute Data Loading ---
     /** 用于加载敌人属性的数据表 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Config|Attributes")
@@ -140,6 +153,10 @@ protected:
     /** 标记属性是否已从数据表初始化 */
     UPROPERTY(Transient, VisibleInstanceOnly, Category = "Character|State") // Transient: 不需要保存
     bool bAttributesInitialized; // <--- 添加此行声明
+
+    /** 用于标记角色眩晕/受击状态的 GameplayTag */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character|State")
+    FGameplayTag StunnedTag; // 眩晕标签
 
     /** 处理角色死亡逻辑 */
     virtual void HandleDeath();

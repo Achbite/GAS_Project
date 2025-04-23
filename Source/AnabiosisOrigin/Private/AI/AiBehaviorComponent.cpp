@@ -23,6 +23,7 @@
 #include "AI/EnemyAIController.h" // 包含子类以便 Cast
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "BehaviorTree/Blackboard/BlackboardKeyType_Float.h" // 确保包含 Float Key 类型
+#include "GameFramework/WorldSettings.h" // Include for GetTimeSeconds
 
 // --- Blackboard Key Names ---
 const FName BlackboardKey_AIState = FName("AIState");
@@ -288,23 +289,67 @@ FVector UAiBehaviorComponent::GetRandomPatrolPoint() const
 
 bool UAiBehaviorComponent::IsInAttackRange(const ACharacter* TargetActor) const
 {
-	// UE_LOG(LogTemp, Warning, TEXT("UAiBehaviorComponent::IsInAttackRange not implemented."));
 	if (!OwnerEnemy || !TargetActor) return false;
+	// 使用 AttackRangeSquared 进行比较
 	return FVector::DistSquared(OwnerEnemy->GetActorLocation(), TargetActor->GetActorLocation()) <= AttackRangeSquared;
 }
 
 bool UAiBehaviorComponent::IsInChaseRange(const ACharacter* TargetActor) const
 {
-	// UE_LOG(LogTemp, Warning, TEXT("UAiBehaviorComponent::IsInChaseRange not implemented."));
 	if (!OwnerEnemy || !TargetActor) return false;
 	return FVector::DistSquared(OwnerEnemy->GetActorLocation(), TargetActor->GetActorLocation()) <= ChaseRangeSquared;
 }
 
 bool UAiBehaviorComponent::IsInDetectionRange(const ACharacter* TargetActor) const
 {
-	// UE_LOG(LogTemp, Warning, TEXT("UAiBehaviorComponent::IsInDetectionRange not implemented."));
 	if (!OwnerEnemy || !TargetActor) return false;
 	return FVector::DistSquared(OwnerEnemy->GetActorLocation(), TargetActor->GetActorLocation()) <= DetectionRangeSquared;
+}
+
+bool UAiBehaviorComponent::CanAttack() const
+{
+	// 检查是否初始化、是否眩晕、是否有攻击能力，以及攻击间隔是否已过
+	if (!bIsInitialized || !OwnerEnemy || OwnerEnemy->IsStunned() || !MeleeAttackAbility)
+	{
+		return false;
+	}
+	// 使用 GetWorld()->GetTimeSeconds() 获取当前游戏时间
+	return GetWorld() && (GetWorld()->GetTimeSeconds() >= LastAttackTime + AttackInterval);
+}
+
+bool UAiBehaviorComponent::TryExecuteMeleeAttack()
+{
+	if (!CanAttack())
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("%s cannot attack now (Cooldown or Stunned)."), OwnerEnemy ? *OwnerEnemy->GetName() : TEXT("Unknown"));
+		return false;
+	}
+
+	UAbilitySystemComponent* OwnerASC = OwnerEnemy ? OwnerEnemy->GetAbilitySystemComponent() : nullptr;
+	if (!OwnerASC)
+	{
+		UE_LOG(LogTemp, Error, TEXT("%s failed to get ASC for attack."), OwnerEnemy ? *OwnerEnemy->GetName() : TEXT("Unknown"));
+		return false;
+	}
+
+	// 尝试按 Tag 激活能力
+	FGameplayTagContainer AttackAbilityTagContainer;
+	AttackAbilityTagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.Action.MeleeAttack"))); // 使用我们定义的 Tag
+
+	bool bActivated = OwnerASC->TryActivateAbilitiesByTag(AttackAbilityTagContainer);
+
+	if (bActivated)
+	{
+		LastAttackTime = GetWorld()->GetTimeSeconds(); // 更新上次攻击时间
+		UE_LOG(LogTemp, Log, TEXT("%s executed melee attack ability."), *OwnerEnemy->GetName());
+		return true;
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s failed to activate melee attack ability by tag."), *OwnerEnemy->GetName());
+		// 可能是能力正在冷却、资源不足或被其他 Tag 阻塞
+		return false;
+	}
 }
 
 void UAiBehaviorComponent::SetAIStateTag(const FGameplayTag& NewStateTag)

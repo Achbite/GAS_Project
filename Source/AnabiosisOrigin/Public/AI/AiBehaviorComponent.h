@@ -15,6 +15,7 @@
 #include "Components/ActorComponent.h"
 #include "Data/EnemyAttributeData.h" // 包含敌人属性数据定义
 #include "GameplayTagContainer.h" // 包含 GameplayTag 头文件
+#include "Abilities/GameplayAbility.h" // Include GameplayAbility for TSubclassOf
 #include "AiBehaviorComponent.generated.h"
 
 // 前向声明
@@ -47,6 +48,14 @@ public:
 	/** 设置当前目标 Actor (并更新 Blackboard) */
 	UFUNCTION(BlueprintCallable, Category = "AI|Targeting")
 	void SetTargetActor(ACharacter* NewTarget);
+
+	/** 尝试执行近战攻击 */
+	UFUNCTION(BlueprintCallable, Category = "AI|Actions")
+	bool TryExecuteMeleeAttack();
+
+	/** 检查是否可以执行攻击 (冷却时间) */
+	UFUNCTION(BlueprintPure, Category = "AI|Checks")
+	bool CanAttack() const;
 
 	// --- 公开的 AI 逻辑函数 ---
 	/** 检查目标是否在攻击范围内 */
@@ -91,6 +100,10 @@ protected:
 	/** 标记组件是否已成功初始化 */
 	UPROPERTY(Transient, VisibleInstanceOnly, Category = "AI|State")
 	bool bIsInitialized;
+
+	/** 用于近战攻击的 Gameplay Ability */
+	UPROPERTY(EditDefaultsOnly, Category = "AI|Combat")
+	TSubclassOf<UGameplayAbility> MeleeAttackAbility;
 
 	// --- AI 参数 (从 AttributeData 初始化) ---
 	/** 敌人的行为模式 */

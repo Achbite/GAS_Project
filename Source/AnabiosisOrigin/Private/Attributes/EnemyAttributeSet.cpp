@@ -26,6 +26,8 @@
 #include "GameplayEffectExtension.h"
 #include "Data/EnemyAttributeData.h"
 #include "AbilitySystemComponent.h" 
+#include "Characters/EnemyBaseCharacter.h" // Include Character for casting
+#include "GameplayTagsManager.h" // Include for Gameplay Tags
 
 UEnemyAttributeSet::UEnemyAttributeSet()
 {
@@ -58,13 +60,47 @@ void UEnemyAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallb
 {
 	Super::PostGameplayEffectExecute(Data);
 
-	// 在 GameplayEffect 执行后进行 Clamp (确保当前值不超过最大值)
-	// 注意：直接通过 TakeDamage 修改属性不会触发此函数
+	FGameplayEffectContextHandle Context = Data.EffectSpec.GetContext();
+	UAbilitySystemComponent* SourceASC = Context.GetOriginalInstigatorAbilitySystemComponent();
+	const FGameplayTagContainer& SourceTags = *Data.EffectSpec.CapturedSourceTags.GetAggregatedTags();
+	AActor* TargetActor = nullptr;
+	AController* TargetController = nullptr;
+	AEnemyBaseCharacter* TargetCharacter = nullptr;
+	if (Data.Target.AbilityActorInfo.IsValid() && Data.Target.AbilityActorInfo->AvatarActor.IsValid())
+	{
+		TargetActor = Data.Target.AbilityActorInfo->AvatarActor.Get();
+		TargetController = Data.Target.AbilityActorInfo->PlayerController.Get(); // Might be AIController
+		TargetCharacter = Cast<AEnemyBaseCharacter>(TargetActor);
+	}
+
+	// Clamp Health
 	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
+		// Clamp Health between 0 and MaxHealth.
 		SetHealth(FMath::Clamp(GetHealth(), 0.0f, GetMaxHealth()));
+
+		if (TargetCharacter && GetHealth() <= 0.0f && !TargetCharacter->IsDead())
+		{
+			// 触发死亡逻辑 (如果尚未死亡)
+			// 注意：TakeDamage 通常是处理死亡的主要地方，这里作为备用
+			// TargetCharacter->HandleDeath();
+		}
+		// --- 可以在这里发送受击事件，作为 TakeDamage 的替代方案 ---
+		// else if (TargetCharacter && Data.EvaluatedData.Magnitude < 0.0f) // Magnitude < 0 表示受到伤害
+		// {
+		//     FGameplayEventData Payload;
+		//     Payload.EventTag = FGameplayTag::RequestGameplayTag(FName("Event.Damage.HitReact"));
+		//     Payload.Instigator = Context.GetInstigator();
+		//     Payload.Target = TargetActor;
+		//     Payload.OptionalObject = Context.GetEffectCauser();
+		//     Payload.ContextHandle = Context;
+		//     Payload.EventMagnitude = Data.EvaluatedData.Magnitude;
+		//
+		//     Data.Target.AbilityActorInfo->AbilitySystemComponent->HandleGameplayEvent(Payload.EventTag, &Payload);
+		// }
+		// ---------------------------------------------------------
 	}
-	// 可以添加其他属性的 PostExecute 逻辑
+	// ... (Clamp other attributes if needed) ...
 }
 
 void UEnemyAttributeSet::AdjustAttributeForMaxChange(FGameplayAttributeData& AffectedAttribute, 
