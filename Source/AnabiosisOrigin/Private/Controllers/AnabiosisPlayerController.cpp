@@ -104,11 +104,6 @@ void AAnabiosisPlayerController::SetupInputComponent()
 			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &AAnabiosisPlayerController::StopJumping); // 跳跃结束
 		} else UE_LOG(LogTemp, Error, TEXT("玩家控制器：未设置 JumpAction。"));
 
-		// 绑定攻击 Action
-		if (AttackAction)
-			EnhancedInputComponent->BindAction(AttackAction, ETriggerEvent::Started, this, &AAnabiosisPlayerController::OnAttackActionStarted);
-		else UE_LOG(LogTemp, Warning, TEXT("玩家控制器：未设置 AttackAction。攻击输入将无效。"));
-
 		// 绑定切换攻击/锁定视角 Action
 		if (AttackLookAction)
 			EnhancedInputComponent->BindAction(AttackLookAction, ETriggerEvent::Started, this, &AAnabiosisPlayerController::ToggleAttackLook);
@@ -177,38 +172,6 @@ void AAnabiosisPlayerController::StopJumping()
 	}
 }
 
-void AAnabiosisPlayerController::OnAttackActionStarted(const FInputActionValue& Value)
-{
-	// 检查角色是否有效
-	if (!ControlledCharacter) return;
-
-	// 获取角色的能力系统组件
-	UAbilitySystemComponent* AbilitySystem = ControlledCharacter->GetAbilitySystemComponent();
-	if (!AbilitySystem)
-	{
-		UE_LOG(LogTemp, Error, TEXT("攻击输入：角色上的 AbilitySystemComponent 为空。"));
-		return;
-	}
-
-	// 获取角色当前设置的攻击能力标签
-	FGameplayTag AttackTag = ControlledCharacter->GetAttackAbilityTag();
-	if (!AttackTag.IsValid())
-	{
-		UE_LOG(LogTemp, Warning, TEXT("攻击输入：角色上的 AttackAbilityTag 无效。无法通过标签激活攻击能力。"));
-		return;
-	}
-
-	// 尝试通过标签激活能力
-	FGameplayTagContainer AbilityTags;
-	AbilityTags.AddTag(AttackTag);
-
-	bool bSuccess = AbilitySystem->TryActivateAbilitiesByTag(AbilityTags);
-	if (!bSuccess)
-	{
-		// 如果激活失败，记录警告
-		UE_LOG(LogTemp, Warning, TEXT("无法激活标签为 %s 的能力。能力是否已授予且可激活？"), *AttackTag.ToString());
-	}
-}
 
 void AAnabiosisPlayerController::ToggleAttackLook(const FInputActionValue& Value)
 {

@@ -27,6 +27,7 @@
 #include "CoreMinimal.h"
 #include "Engine/DataTable.h"
 #include "Animation/AnimMontage.h" 
+#include "Abilities/GameplayAbility.h" // Include for TSubclassOf<UGameplayAbility>
 #include "EnemyAttributeData.generated.h"
 
 /**
@@ -121,6 +122,10 @@ struct FEnemyAttributeData : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Rewards", meta = (ClampMin = "0.0", ClampMax = "1.0"))
 	float LootChance = 0.5f; // 掉落几率
+
+	/** 从数据表加载时授予敌人的能力列表 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Abilities")
+	TArray<TSubclassOf<UGameplayAbility>> GrantedAbilities;
 
 	FEnemyAttributeData() = default; // 使用默认构造函数
 };

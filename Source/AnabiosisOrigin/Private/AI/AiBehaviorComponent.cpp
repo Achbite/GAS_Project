@@ -34,7 +34,6 @@
 #include "GameplayTagsManager.h" // 包含 GameplayTag 管理器
 #include "BehaviorTree/BlackboardComponent.h"
 #include "AbilitySystemComponent.h"
-#include "Abilities/GameplayAbility.h"
 #include "Engine/World.h"
 #include "DrawDebugHelpers.h"
 #include "AIController.h" // 确保包含 AI 控制器基类
@@ -74,7 +73,6 @@ UAiBehaviorComponent::UAiBehaviorComponent()
 	AttackInterval = 2.0f; // 默认攻击间隔
 	AggroThreshold = 50.0f;
 	bIsInitialized = false; // 初始未初始化
-	LastAttackTime = -AttackInterval; // 初始化上次攻击时间，确保第一次可以攻击
 	PatrolOrigin = FVector::ZeroVector;
 	NextPatrolLocation = FVector::ZeroVector;
 	OwnerController = nullptr;
@@ -219,15 +217,15 @@ void UAiBehaviorComponent::SetTargetActor(ACharacter* NewTarget)
 }
 
 // --- 以下 Handle...State 函数是占位符，具体逻辑应在行为树或服务中实现 ---
-void UAiBehaviorComponent::UpdateAIState(float DeltaTime) {}
-bool UAiBehaviorComponent::CanSeeTarget(const ACharacter* TargetActor) const { return false; }
-ACharacter* UAiBehaviorComponent::FindTargetInRange() { return nullptr; }
-void UAiBehaviorComponent::HandleIdleState(float DeltaTime) {}
-void UAiBehaviorComponent::HandlePatrollingState(float DeltaTime) {}
-void UAiBehaviorComponent::HandleChasingState(float DeltaTime) {}
-void UAiBehaviorComponent::HandleAttackingState(float DeltaTime) {}
-void UAiBehaviorComponent::HandleSearchingState(float DeltaTime) {}
-void UAiBehaviorComponent::HandleReturningState(float DeltaTime) {}
+// void UAiBehaviorComponent::UpdateAIState(float DeltaTime) {}
+// bool UAiBehaviorComponent::CanSeeTarget(const ACharacter* TargetActor) const { return false; }
+// ACharacter* UAiBehaviorComponent::FindTargetInRange() { return nullptr; }
+// void UAiBehaviorComponent::HandleIdleState(float DeltaTime) {}
+// void UAiBehaviorComponent::HandlePatrollingState(float DeltaTime) {}
+// void UAiBehaviorComponent::HandleChasingState(float DeltaTime) {}
+// void UAiBehaviorComponent::HandleAttackingState(float DeltaTime) {}
+// void UAiBehaviorComponent::HandleSearchingState(float DeltaTime) {}
+// void UAiBehaviorComponent::HandleReturningState(float DeltaTime) {}
 // --------------------------------------------------------------------
 
 FVector UAiBehaviorComponent::GetRandomPatrolPoint() const
@@ -275,55 +273,6 @@ bool UAiBehaviorComponent::IsInDetectionRange(const ACharacter* TargetActor) con
 {
 	if (!OwnerEnemy || !TargetActor) return false;
 	return FVector::DistSquared(OwnerEnemy->GetActorLocation(), TargetActor->GetActorLocation()) <= DetectionRangeSquared;
-}
-
-bool UAiBehaviorComponent::CanAttack() const
-{
-	// 检查是否已初始化、拥有者是否有效、是否处于眩晕状态、是否有近战攻击能力
-	if (!bIsInitialized || !OwnerEnemy || OwnerEnemy->IsStunned() || !MeleeAttackAbility)
-	{
-		return false;
-	}
-	// 检查攻击间隔是否已过
-	// 使用 GetWorld()->GetTimeSeconds() 获取当前游戏时间
-	return GetWorld() && (GetWorld()->GetTimeSeconds() >= LastAttackTime + AttackInterval);
-}
-
-bool UAiBehaviorComponent::TryExecuteMeleeAttack()
-{
-	// 检查是否满足攻击条件
-	if (!CanAttack())
-	{
-		UE_LOG(LogTemp, Verbose, TEXT("%s 现在无法攻击 (冷却中或眩晕)。"), OwnerEnemy ? *OwnerEnemy->GetName() : TEXT("未知"));
-		return false;
-	}
-
-	// 获取拥有者的能力系统组件
-	UAbilitySystemComponent* OwnerASC = OwnerEnemy ? OwnerEnemy->GetAbilitySystemComponent() : nullptr;
-	if (!OwnerASC)
-	{
-		UE_LOG(LogTemp, Error, TEXT("%s 攻击失败：无法获取 ASC。"), OwnerEnemy ? *OwnerEnemy->GetName() : TEXT("未知"));
-		return false;
-	}
-
-	// 尝试通过标签激活近战攻击能力
-	FGameplayTagContainer AttackAbilityTagContainer;
-	AttackAbilityTagContainer.AddTag(FGameplayTag::RequestGameplayTag(FName("Ability.Action.MeleeAttack"))); // 使用预定义的近战攻击标签
-
-	bool bActivated = OwnerASC->TryActivateAbilitiesByTag(AttackAbilityTagContainer);
-
-	if (bActivated)
-	{
-		LastAttackTime = GetWorld()->GetTimeSeconds(); // 更新上次攻击时间戳
-		UE_LOG(LogTemp, Log, TEXT("%s 执行了近战攻击能力。"), *OwnerEnemy->GetName());
-		return true; // 激活成功
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("%s 通过标签激活近战攻击能力失败。"), *OwnerEnemy->GetName());
-		// 可能的原因：能力正在冷却、资源不足、被其他标签阻塞等
-		return false; // 激活失败
-	}
 }
 
 void UAiBehaviorComponent::SetAIStateTag(const FGameplayTag& NewStateTag)

@@ -39,6 +39,7 @@
 #include "AI/AiBehaviorComponent.h" // 包含 AI 行为组件以便查找
 #include "AI/EnemyAIController.h"   // 包含 AI 控制器以便通知 (如果需要)
 #include "GameplayTagsManager.h" // Include for Gameplay Tags
+#include "Abilities/GameplayAbility.h" // Include for GameplayAbility
 
 #define COLLISION_ENEMY ECC_GameTraceChannel1
 
@@ -108,19 +109,6 @@ void AEnemyBaseCharacter::PostInitializeComponents()
         InitializeAttributesFromDataTable();
         // 注意：AiBehaviorComponent 的初始化现在在 InitializeAttributesFromDataTable 内部完成
     }
-    // --- 移除这里的 AiBehaviorComponent 初始化逻辑，因为它移到了 InitializeAttributesFromDataTable 内部 ---
-    /*
-    if (AbilitySystemComponent && AttributeSet)
-    {
-        // ...
-        if (AiBehaviorComponent)
-        {
-           // ... (Initialization logic removed) ...
-        }
-        // ...
-    }
-    */
-    // -------------------------------------------------------------------------------------------------
 }
 
 void AEnemyBaseCharacter::InitializeAttributesFromDataTable()
@@ -128,7 +116,6 @@ void AEnemyBaseCharacter::InitializeAttributesFromDataTable()
     // --- 添加初始化检查 ---
     if (bAttributesInitialized)
     {
-        // UE_LOG(LogTemp, Verbose, TEXT("EnemyBaseCharacter %s: Attributes already initialized."), *GetName()); // 可以用 Verbose 级别记录
         return;
     }
     // -----------------------
@@ -165,51 +152,6 @@ void AEnemyBaseCharacter::InitializeAttributesFromDataTable()
 
     // --- 应用加载的属性到 AttributeSet ---
     // 使用 AbilitySystemComponent 初始化基础属性值
-    // 这会触发属性的元数据（如 Clamp）和相关计算（如 MaxHealth 基于 Constitution）
-    
-    // 示例：直接设置基础值 (如果你的 AttributeSet 这样设计)
-    // AttributeSet->InitHealth(Row->InitialHealth);
-    // AttributeSet->InitMaxHealth(Row->InitialMaxHealth);
-    // AttributeSet->InitAttackPower(Row->AttackPower);
-    // AttributeSet->InitDefense(Row->Defense);
-    // ... 其他属性 ...
-
-    // 或者，更好的方式是使用 GameplayEffect 来初始化属性
-    // 创建一个临时的 GameplayEffect 或使用预定义的初始化 GE
-    // 例如，假设你有一个 UPROPERTY 定义的 TSubclassOf<UGameplayEffect> InitStatsEffect;
-    /*
-    if (InitStatsEffect)
-    {
-        FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
-        EffectContext.AddSourceObject(this);
-        FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(InitStatsEffect, Row->Level, EffectContext);
-
-        if (SpecHandle.IsValid())
-        {
-            // 使用 SetByCaller 修改 GameplayEffect 中的值
-            SpecHandle.Data->SetSetByCallerMagnitude(FGameplayTag::RequestGameplayTag(FName("Data.Health.Initial")), Row->InitialHealth);
-            SpecHandle.Data->SetSetByCallerMagnitude(FGameplayTag::RequestGameplayTag(FName("Data.MaxHealth.Initial")), Row->InitialMaxHealth);
-            SpecHandle.Data->SetSetByCallerMagnitude(FGameplayTag::RequestGameplayTag(FName("Data.AttackPower.Initial")), Row->AttackPower);
-            SpecHandle.Data->SetSetByCallerMagnitude(FGameplayTag::RequestGameplayTag(FName("Data.Defense.Initial")), Row->Defense);
-            // ... 为其他需要从数据表初始化的属性添加 SetByCaller ...
-
-            AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-            UE_LOG(LogTemp, Log, TEXT("Enemy %s initialized attributes from DataTable row '%s' using GE."), *GetName(), *AttributeDataRowName.ToString());
-        }
-    }
-    else
-    {
-         UE_LOG(LogTemp, Warning, TEXT("EnemyBaseCharacter %s: InitStatsEffect is not set. Cannot initialize attributes via GameplayEffect."), *GetName());
-         // 回退到直接设置 (如果实现了 Init 函数)
-         AttributeSet->InitHealth(Row->InitialHealth);
-         AttributeSet->InitMaxHealth(Row->InitialMaxHealth);
-         // ...
-    }
-    */
-    
-    // --- 简化版：直接调用 AttributeSet 的初始化函数 (假设已实现) ---
-    // 这要求你的 UEnemyAttributeSet 有类似 InitHealth, InitMaxHealth 的函数
-    // 并且这些函数内部调用了对应的 SetBaseValue 和 SetCurrentValue
     AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetHealthAttribute(), Row->InitialHealth);
     AttributeSet->SetHealth(Row->InitialHealth); // 同时设置当前值
     AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetMaxHealthAttribute(), Row->InitialMaxHealth);
@@ -221,7 +163,6 @@ void AEnemyBaseCharacter::InitializeAttributesFromDataTable()
     LoadedHitReactionMontage = Row->HitReactionMontage;
     if (!LoadedHitReactionMontage)
     {
-        // 保留警告
         UE_LOG(LogTemp, Warning, TEXT("Enemy %s: HitReactionMontage is not set in DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
     }
 
@@ -229,12 +170,27 @@ void AEnemyBaseCharacter::InitializeAttributesFromDataTable()
     LoadedDeathMontage = Row->DeathMontage;
     if (!LoadedDeathMontage)
     {
-        // 保留警告
         UE_LOG(LogTemp, Warning, TEXT("Enemy %s: DeathMontage is not set in DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
     }
 
-    // 保留初始化完成日志
-    UE_LOG(LogTemp, Log, TEXT("Enemy %s initialized attributes and montages from DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
+    // --- 授予从数据表定义的能力 ---
+    if (HasAuthority() && AbilitySystemComponent) // 确保在服务器上且 ASC 有效
+    {
+        for (const TSubclassOf<UGameplayAbility>& AbilityClass : Row->GrantedAbilities)
+        {
+            if (AbilityClass)
+            {
+                FGameplayAbilitySpec AbilitySpec(AbilityClass, 1, INDEX_NONE, this); // Level 1, no input ID
+                AbilitySystemComponent->GiveAbility(AbilitySpec);
+                UE_LOG(LogTemp, Log, TEXT("Enemy %s granted ability: %s"), *GetName(), *AbilityClass->GetName());
+            }
+            else
+            {
+                UE_LOG(LogTemp, Warning, TEXT("Enemy %s found a NULL ability class in GrantedAbilities array for row '%s'."), *GetName(), *AttributeDataRowName.ToString());
+            }
+        }
+    }
+    // -----------------------------
 
     // --- 初始化 AI 行为组件 ---
     if (AiBehaviorComponent)
@@ -253,7 +209,7 @@ void AEnemyBaseCharacter::InitializeAttributesFromDataTable()
     bAttributesInitialized = true;
     // -----------------------
 
-    UE_LOG(LogTemp, Log, TEXT("Enemy %s finished initializing attributes, montages, and AI behavior from DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
+    UE_LOG(LogTemp, Log, TEXT("Enemy %s finished initializing attributes, montages, abilities, and AI behavior from DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
 
     // 应用其他从数据表读取的配置，例如 AI 参数 (如果需要)
     // GetCharacterMovement()->MaxWalkSpeed = ... Row->MovementSpeed ... (如果数据表中有)
@@ -359,8 +315,9 @@ void AEnemyBaseCharacter::PossessedBy(AController* NewController)
         }
         // -------------------------
 
-        GiveDefaultAbilities();
-        ApplyDefaultEffects();
+        // 注意：默认能力现在从数据表授予，这里不再调用 GiveDefaultAbilities
+        // GiveDefaultAbilities();
+        ApplyDefaultEffects(); // 默认效果仍然可以应用
     }
 }
 
@@ -500,19 +457,6 @@ void AEnemyBaseCharacter::OnDeathMontageEnded(UAnimMontage* Montage, bool bInter
 	// 保留蒙太奇结束和销毁日志
 	UE_LOG(LogTemp, Log, TEXT("EnemyBaseCharacter %s death montage ended (Interrupted: %s). Destroying Actor."), *GetName(), bInterrupted ? TEXT("Yes") : TEXT("No"));
 	Destroy();
-}
-
-void AEnemyBaseCharacter::GiveDefaultAbilities()
-{
-    if (!HasAuthority() || !AbilitySystemComponent) return;
-
-    for (TSubclassOf<UGameplayAbility>& Ability : DefaultAbilities)
-    {
-        if (Ability)
-        {
-            AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(Ability, 1, INDEX_NONE, this));
-        }
-    }
 }
 
 void AEnemyBaseCharacter::ApplyDefaultEffects()

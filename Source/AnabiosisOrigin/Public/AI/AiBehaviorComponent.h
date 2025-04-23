@@ -15,7 +15,6 @@
 #include "Components/ActorComponent.h"
 #include "Data/EnemyAttributeData.h" // 包含敌人属性数据定义
 #include "GameplayTagContainer.h" // 包含 GameplayTag 头文件
-#include "Abilities/GameplayAbility.h" // Include GameplayAbility for TSubclassOf
 #include "AiBehaviorComponent.generated.h"
 
 // 前向声明
@@ -49,25 +48,17 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI|Targeting")
 	void SetTargetActor(ACharacter* NewTarget);
 
-	/** 尝试执行近战攻击 */
-	UFUNCTION(BlueprintCallable, Category = "AI|Actions")
-	bool TryExecuteMeleeAttack();
-
-	/** 检查是否可以执行攻击 (冷却时间) */
-	UFUNCTION(BlueprintPure, Category = "AI|Checks")
-	bool CanAttack() const;
-
-	// --- 公开的 AI 逻辑函数 ---
+	// --- 公开的 AI 逻辑函数 (范围检查) ---
 	/** 检查目标是否在攻击范围内 */
-	UFUNCTION(BlueprintPure, Category = "AI|Checks") // Make BlueprintPure for potential BP use
+	UFUNCTION(BlueprintPure, Category = "AI|Checks")
 	virtual bool IsInAttackRange(const ACharacter* TargetActor) const;
 
 	/** 检查目标是否在追击范围内 */
-	UFUNCTION(BlueprintPure, Category = "AI|Checks") // Make BlueprintPure
+	UFUNCTION(BlueprintPure, Category = "AI|Checks")
 	virtual bool IsInChaseRange(const ACharacter* TargetActor) const;
 
 	/** 检查目标是否在侦测范围内 */
-	UFUNCTION(BlueprintPure, Category = "AI|Checks") // Make BlueprintPure
+	UFUNCTION(BlueprintPure, Category = "AI|Checks")
 	virtual bool IsInDetectionRange(const ACharacter* TargetActor) const;
 
 protected:
@@ -101,10 +92,6 @@ protected:
 	UPROPERTY(Transient, VisibleInstanceOnly, Category = "AI|State")
 	bool bIsInitialized;
 
-	/** 用于近战攻击的 Gameplay Ability */
-	UPROPERTY(EditDefaultsOnly, Category = "AI|Combat")
-	TSubclassOf<UGameplayAbility> MeleeAttackAbility;
-
 	// --- AI 参数 (从 AttributeData 初始化) ---
 	/** 敌人的行为模式 */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI|Parameters")
@@ -135,10 +122,6 @@ protected:
 	float AggroThreshold;
 
 	// --- 内部状态变量 ---
-	/** 上次攻击的时间戳 */
-	UPROPERTY(Transient)
-	float LastAttackTime;
-
 	/** 巡逻的原点/家位置 */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI|Patrol")
 	FVector PatrolOrigin;
@@ -148,28 +131,6 @@ protected:
 	FVector NextPatrolLocation;
 
 	// --- AI 逻辑函数 ---
-	/** 更新 AI 状态 (如果需要基于 Tick 的逻辑) */
-	virtual void UpdateAIState(float DeltaTime);
-
-	/** 检查是否能看到目标 Actor */
-	virtual bool CanSeeTarget(const ACharacter* TargetActor) const;
-
-	/** 在侦测范围内查找目标 */
-	virtual ACharacter* FindTargetInRange();
-
-	/** 处理 Idle 状态逻辑 */
-	virtual void HandleIdleState(float DeltaTime);
-	/** 处理 Patrolling 状态逻辑 */
-	virtual void HandlePatrollingState(float DeltaTime);
-	/** 处理 Chasing 状态逻辑 */
-	virtual void HandleChasingState(float DeltaTime);
-	/** 处理 Attacking 状态逻辑 */
-	virtual void HandleAttackingState(float DeltaTime);
-	/** 处理 Searching 状态逻辑 */
-	virtual void HandleSearchingState(float DeltaTime);
-	/** 处理 Returning 状态逻辑 */
-	virtual void HandleReturningState(float DeltaTime);
-
 	/** 设置新的 AI 状态 GameplayTag (并更新 Blackboard) */
 	virtual void SetAIStateTag(const FGameplayTag& NewStateTag);
 

@@ -15,7 +15,6 @@
  * along with this program.  If not, see https://www.gnu.org/licenses/. 
  */
 
- 
 /*
 * 文件名: EnemyAttributeSet.cpp
 * 功能描述： 实现敌人属性集的具体逻辑，包括默认值、属性调整和 Clamp。
@@ -25,9 +24,9 @@
 #include "GameplayEffect.h"
 #include "GameplayEffectExtension.h"
 #include "Data/EnemyAttributeData.h"
-#include "AbilitySystemComponent.h" 
-#include "Characters/EnemyBaseCharacter.h" // Include Character for casting
-#include "GameplayTagsManager.h" // Include for Gameplay Tags
+#include "AbilitySystemComponent.h"
+#include "Characters/EnemyBaseCharacter.h"
+#include "GameplayTagsManager.h"
 
 UEnemyAttributeSet::UEnemyAttributeSet()
 {
@@ -37,22 +36,22 @@ UEnemyAttributeSet::UEnemyAttributeSet()
 	AttackPower.SetBaseValue(10.0f); AttackPower.SetCurrentValue(10.0f);
 	Defense.SetBaseValue(5.0f); Defense.SetCurrentValue(5.0f);
 	DetectionRange.SetBaseValue(1000.0f); DetectionRange.SetCurrentValue(1000.0f);
-	AggroValue.SetBaseValue(0.0f); AggroValue.SetCurrentValue(0.0f); 
+	AggroValue.SetBaseValue(0.0f); AggroValue.SetCurrentValue(0.0f);
 }
 
 void UEnemyAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
 {
 	Super::PreAttributeChange(Attribute, NewValue);
 
-	// 在属性值改变生效前进行调整 (例如，当 MaxHealth 改变时调整 Health)
+	// 当 MaxHealth 改变时调整 Health
 	if (Attribute == GetMaxHealthAttribute())
 	{
-		AdjustAttributeForMaxChange(Health, MaxHealth, NewValue, GetHealthAttribute()); 
+		AdjustAttributeForMaxChange(Health, MaxHealth, NewValue, GetHealthAttribute());
 	}
-	// 可以添加其他属性的 PreChange 逻辑，例如 Clamp 仇恨值
+	// Clamp 仇恨值
 	// else if (Attribute == GetAggroValueAttribute())
 	// {
-	//     NewValue = FMath::Max(NewValue, 0.0f); 
+	//     NewValue = FMath::Max(NewValue, 0.0f);
 	// }
 }
 
@@ -76,91 +75,34 @@ void UEnemyAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallb
 	// Clamp Health
 	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
-		// Clamp Health between 0 and MaxHealth.
 		SetHealth(FMath::Clamp(GetHealth(), 0.0f, GetMaxHealth()));
 
-		if (TargetCharacter && GetHealth() <= 0.0f && !TargetCharacter->IsDead())
-		{
-			// 触发死亡逻辑 (如果尚未死亡)
-			// 注意：TakeDamage 通常是处理死亡的主要地方，这里作为备用
-			// TargetCharacter->HandleDeath();
-		}
-		// --- 可以在这里发送受击事件，作为 TakeDamage 的替代方案 ---
-		// else if (TargetCharacter && Data.EvaluatedData.Magnitude < 0.0f) // Magnitude < 0 表示受到伤害
+		// 死亡检查通常在 TakeDamage 或 GE 应用后进行
+		// if (TargetCharacter && GetHealth() <= 0.0f && !TargetCharacter->IsDead())
 		// {
-		//     FGameplayEventData Payload;
-		//     Payload.EventTag = FGameplayTag::RequestGameplayTag(FName("Event.Damage.HitReact"));
-		//     Payload.Instigator = Context.GetInstigator();
-		//     Payload.Target = TargetActor;
-		//     Payload.OptionalObject = Context.GetEffectCauser();
-		//     Payload.ContextHandle = Context;
-		//     Payload.EventMagnitude = Data.EvaluatedData.Magnitude;
-		//
-		//     Data.Target.AbilityActorInfo->AbilitySystemComponent->HandleGameplayEvent(Payload.EventTag, &Payload);
+		//     TargetCharacter->HandleDeath();
 		// }
-		// ---------------------------------------------------------
 	}
 	// ... (Clamp other attributes if needed) ...
 }
 
-void UEnemyAttributeSet::AdjustAttributeForMaxChange(FGameplayAttributeData& AffectedAttribute, 
+void UEnemyAttributeSet::AdjustAttributeForMaxChange(FGameplayAttributeData& AffectedAttribute,
 	const FGameplayAttributeData& MaxAttribute, float NewMaxValue, const FGameplayAttribute& AffectedAttributeProperty)
 {
 	UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent();
 	const float CurrentMaxValue = MaxAttribute.GetCurrentValue();
-	// 如果当前值大于新的最大值，则将当前值调整为新的最大值
 	if (ASC && !FMath::IsNearlyZero(CurrentMaxValue) && AffectedAttribute.GetCurrentValue() > NewMaxValue)
 	{
-		// 同时设置基础值和当前值
 		ASC->SetNumericAttributeBase(AffectedAttributeProperty, NewMaxValue);
 		AffectedAttribute.SetCurrentValue(NewMaxValue);
 	}
 }
 
-void UEnemyAttributeSet::InitializeFromDataTable(const UDataTable* DataTable, const FName& RowName)
-{
-	if (!DataTable)
-	{
-		UE_LOG(LogTemp, Error, TEXT("InitializeFromDataTable: DataTable is NULL."));
-		return;
-	}
-
-	const FString ContextString(TEXT("Initializing Enemy Attributes"));
-	const FEnemyAttributeData* Row = DataTable->FindRow<FEnemyAttributeData>(RowName, ContextString);
-	if (!Row)
-	{
-		UE_LOG(LogTemp, Error, TEXT("InitializeFromDataTable: Cannot find row '%s' in DataTable '%s'."), *RowName.ToString(), *DataTable->GetName());
-		return;
-	}
-
-	UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent();
-	if (!ASC)
-	{
-		UE_LOG(LogTemp, Error, TEXT("InitializeFromDataTable: Owning AbilitySystemComponent is NULL."));
-		return;
-	}
-
-	// --- 设置基础属性 ---
-	ASC->SetNumericAttributeBase(GetHealthAttribute(), Row->InitialHealth);
-	SetHealth(Row->InitialHealth); 
-	ASC->SetNumericAttributeBase(GetMaxHealthAttribute(), Row->InitialMaxHealth);
-	SetMaxHealth(Row->InitialMaxHealth); 
-	
-	// --- 设置战斗属性 ---
-	ASC->SetNumericAttributeBase(GetAttackPowerAttribute(), Row->AttackPower);
-	SetAttackPower(Row->AttackPower); 
-	ASC->SetNumericAttributeBase(GetDefenseAttribute(), Row->Defense);
-	SetDefense(Row->Defense); 
-	
-	// --- AI相关属性设置 ---
-	ASC->SetNumericAttributeBase(GetDetectionRangeAttribute(), Row->DetectionRange);
-	SetDetectionRange(Row->DetectionRange); 
-
-	// 仇恨值通常从 0 开始
-	ASC->SetNumericAttributeBase(GetAggroValueAttribute(), 0.0f); 
-	SetAggroValue(0.0f); 
-
-	// 可以移除这个日志，除非调试初始化问题
-	// UE_LOG(LogTemp, Log, TEXT("Enemy attributes initialized from DataTable row '%s'."), *RowName.ToString());
-}
+// InitializeFromDataTable 函数已不再直接被 EnemyBaseCharacter 调用，
+// 属性初始化现在通过 SetNumericAttributeBase 完成。
+// 如果将来需要单独初始化 AttributeSet，可以保留此函数。
+// void UEnemyAttributeSet::InitializeFromDataTable(const UDataTable* DataTable, const FName& RowName)
+// {
+//     // ... (Implementation removed for brevity, as it's currently unused) ...
+// }
 

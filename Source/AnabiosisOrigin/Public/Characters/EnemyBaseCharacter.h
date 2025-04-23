@@ -43,7 +43,6 @@
 #include "AbilitySystemInterface.h"
 #include "GameplayEffectTypes.h"
 #include "GameplayEffect.h"
-#include "Abilities/GameplayAbility.h"
 #include "Engine/DataTable.h" // 包含数据表头文件
 #include "Attributes/EnemyAttributeSet.h" // 包含 EnemyAttributeSet 的完整头文件
 #include "Animation/AnimMontage.h" // Ensure AnimMontage is included
@@ -117,10 +116,6 @@ protected:
     TObjectPtr<UAiBehaviorComponent> AiBehaviorComponent; // AI 行为组件
 
     // --- GAS Initialization ---
-    /** 默认赋予的能力列表 */
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities")
-    TArray<TSubclassOf<UGameplayAbility>> DefaultAbilities; // 默认能力列表
-
     /** 初始化时应用的 GameplayEffect 列表 */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Abilities")
     TArray<TSubclassOf<UGameplayEffect>> DefaultEffects; // 默认效果列表
@@ -165,9 +160,6 @@ protected:
     UFUNCTION() // UFUNCTION is required for delegate binding
     virtual void OnDeathMontageEnded(UAnimMontage* Montage, bool bInterrupted);
 
-    /** 初始化默认能力 */
-    virtual void GiveDefaultAbilities();
-    
     /** 应用默认效果 */
     virtual void ApplyDefaultEffects();
 

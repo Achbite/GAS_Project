@@ -115,7 +115,6 @@ protected:
     void Look(const FInputActionValue& Value);
     void Jump();
     void StopJumping();
-    void OnAttackActionStarted(const FInputActionValue& Value);
     void ToggleAttackLook(const FInputActionValue& Value);
 
 private:
