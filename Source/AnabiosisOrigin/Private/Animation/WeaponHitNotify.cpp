@@ -70,6 +70,7 @@ UWeaponHitNotify::UWeaponHitNotify()
 	HitReactionMontage = nullptr; // 默认无备选受击蒙太奇
 	// 初始化缓存指针
 	CachedWeaponMeshComp = nullptr;
+	HitReactTag = FGameplayTag::RequestGameplayTag(FName("State.HitReact")); // Ensure default is correct
 }
 
 /**
@@ -291,10 +292,10 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 			UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitCharacter);
 			if (TargetASC && HitReactTag.IsValid())
 			{
+				// --- 只添加 Tag，由 GA_HitReact 处理后续逻辑 ---
 				TargetASC->AddLooseGameplayTag(HitReactTag);
-				// 可选：添加一个短暂的 Tag 持续时间，或者依赖其他系统移除 Tag
-				// TargetASC->AddGameplayTag(HitReactTag); // 如果需要计数
 				UE_LOG(LogWeaponHitNotify, Log, TEXT("  向 %s 添加了 Gameplay Tag: %s"), *HitCharacter->GetName(), *HitReactTag.ToString());
+				// ---------------------------------------------
 			}
 			else if (!TargetASC)
 			{
@@ -303,37 +304,6 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 			else // Tag is not valid
 			{
 				UE_LOG(LogWeaponHitNotify, Warning, TEXT("  无法添加 Gameplay Tag：HitReactTag 未在通知 %s 中设置。"), *GetName());
-			}
-
-
-			// --- 获取并播放受击蒙太奇 ---
-			UAnimMontage* MontageToPlay = nullptr;
-			// 尝试从命中的敌人角色获取其特定的受击蒙太奇
-			AEnemyBaseCharacter* EnemyCharacter = Cast<AEnemyBaseCharacter>(HitCharacter);
-			if (EnemyCharacter)
-			{
-				MontageToPlay = EnemyCharacter->GetHitReactionMontage();
-				// 如果敌人没有设置受击蒙太奇，则使用本通知自带的备选蒙太奇
-				if (!MontageToPlay)
-				{
-					 MontageToPlay = this->HitReactionMontage;
-				}
-			}
-			else
-			{
-				 // 如果命中的不是敌人角色 (例如玩家或其他类型)，也尝试使用备选蒙太奇
-				 MontageToPlay = this->HitReactionMontage;
-			}
-
-			// 如果找到了要播放的蒙太奇
-			if (MontageToPlay)
-			{
-				UAnimInstance* AnimInstance = HitCharacter->GetMesh() ? HitCharacter->GetMesh()->GetAnimInstance() : nullptr;
-				// 检查动画实例是否有效，并且当前没有在播放同一个蒙太奇，避免重复播放
-				if (AnimInstance && !AnimInstance->Montage_IsPlaying(MontageToPlay))
-				{
-					AnimInstance->Montage_Play(MontageToPlay, 1.0f); // 播放蒙太奇
-				}
 			}
 
 			// --- 应用伤害 ---

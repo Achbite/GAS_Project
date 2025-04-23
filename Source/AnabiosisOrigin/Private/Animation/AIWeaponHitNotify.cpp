@@ -226,11 +226,10 @@ void UAIWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequ
 		for (const FHitResult& Hit : HitResults)
 		{
 			AActor* HitActor = Hit.GetActor();
-			// 主要目标是玩家角色
 			AAnabiosisOriginCharacter* HitPlayerCharacter = Cast<AAnabiosisOriginCharacter>(HitActor); 
 			if (!HitPlayerCharacter || HitActors.Contains(HitPlayerCharacter)) 
 			{
-				continue; // 如果不是玩家或已处理，则跳过
+				continue; 
 			}
 
 			// --- 处理首次命中的玩家 Character ---
@@ -247,8 +246,10 @@ void UAIWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequ
 			UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitPlayerCharacter);
 			if (TargetASC && HitReactTag.IsValid())
 			{
+				// --- 只添加 Tag，由 GA_HitReact 处理后续逻辑 ---
 				TargetASC->AddLooseGameplayTag(HitReactTag);
 				UE_LOG(LogAIWeaponHitNotify, Log, TEXT("  向玩家 %s 添加了 Gameplay Tag: %s"), *HitPlayerCharacter->GetName(), *HitReactTag.ToString());
+				// ---------------------------------------------
 			}
 			else if (!TargetASC)
 			{
@@ -259,30 +260,10 @@ void UAIWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequ
 				UE_LOG(LogAIWeaponHitNotify, Warning, TEXT("  无法添加 Gameplay Tag：HitReactTag 未在通知 %s 中设置。"), *GetName());
 			}
 
-			// --- 获取并播放玩家的受击蒙太奇 ---
-			UAnimMontage* MontageToPlay = nullptr;
-			// 尝试从玩家角色实例获取受击蒙太奇
-			// 假设 AAnabiosisOriginCharacter 有一个 GetHitReactionMontage() 方法
-			if (HitPlayerCharacter)
-			{
-				MontageToPlay = HitPlayerCharacter->GetHitReactionMontage(); // 调用玩家角色的方法
-			}
-			
-			// 如果玩家角色没有配置或返回空，则使用本通知的备选蒙太奇
-			if (!MontageToPlay)
-			{
-				MontageToPlay = this->FallbackPlayerHitReactionMontage;
-			}
-
-
-			if (MontageToPlay)
-			{
-				UAnimInstance* AnimInstance = HitPlayerCharacter->GetMesh() ? HitPlayerCharacter->GetMesh()->GetAnimInstance() : nullptr;
-				if (AnimInstance && !AnimInstance->Montage_IsPlaying(MontageToPlay))
-				{
-					AnimInstance->Montage_Play(MontageToPlay, 1.0f); 
-				}
-			}
+            // --- 确认没有播放蒙太奇的代码 ---
+            // UAnimMontage* MontageToPlay = nullptr;
+            // ... (No logic here to find or play montage) ...
+            // ---------------------------------
 
 			// --- 应用伤害 ---
 			float AppliedDamage = 0.0f; 

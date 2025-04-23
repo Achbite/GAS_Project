@@ -130,7 +130,7 @@ struct FEnemyAttributeData : public FTableRowBase
 	float LootChance = 0.5f; // 掉落几率
 
 	// --- 能力 ---
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Abilities") // Kept Category
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Abilities") // Ensure EditAnywhere is present
 	TArray<TSubclassOf<UGameplayAbility>> GrantedAbilities;
 
 	FEnemyAttributeData() = default; // 使用默认构造函数

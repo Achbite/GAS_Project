@@ -80,7 +80,7 @@ protected:
 	FGameplayTag AttackAbilityTag; // 攻击能力标签
 
 	/** 默认赋予的能力列表 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackComponent|Abilities")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackComponent|Abilities") // BlueprintReadOnly allows reading in BP, EditDefaultsOnly allows setting in BP Defaults
 	TArray<TSubclassOf<UGameplayAbility>> DefaultAbilities; // 默认能力列表
 
 	// --- Attribute Data Loading ---
