@@ -137,6 +137,10 @@ protected:
     UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "Character|State")
     bool bIsDead; // 是否已死亡
 
+    /** 标记属性是否已从数据表初始化 */
+    UPROPERTY(Transient, VisibleInstanceOnly, Category = "Character|State") // Transient: 不需要保存
+    bool bAttributesInitialized; // <--- 添加此行声明
+
     /** 处理角色死亡逻辑 */
     virtual void HandleDeath();
 

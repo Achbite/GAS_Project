@@ -14,6 +14,7 @@
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "Characters/EnemyBaseCharacter.h" // 需要包含 Pawn 类型以获取组件
 #include "AI/AiBehaviorComponent.h"       // 需要包含 AI 行为组件
+#include "GameFramework/Pawn.h" // 包含 Pawn 头文件
 
 AEnemyAIController::AEnemyAIController()
 {
@@ -32,10 +33,19 @@ void AEnemyAIController::OnPossess(APawn* InPawn)
 {
 	Super::OnPossess(InPawn);
 
+	// --- 添加日志 ---
+	if (!InPawn)
+	{
+		UE_LOG(LogTemp, Error, TEXT("AEnemyAIController::OnPossess: InPawn is NULL!"));
+		return;
+	}
+	UE_LOG(LogTemp, Log, TEXT("AEnemyAIController::OnPossess: Possessing Pawn: %s"), *InPawn->GetName());
+	// ---------------
+
 	AEnemyBaseCharacter* EnemyCharacter = Cast<AEnemyBaseCharacter>(InPawn);
 	if (!EnemyCharacter)
 	{
-		UE_LOG(LogTemp, Error, TEXT("AEnemyAIController::OnPossess: Possessed Pawn is not an AEnemyBaseCharacter."));
+		UE_LOG(LogTemp, Error, TEXT("AEnemyAIController::OnPossess: Possessed Pawn '%s' is not an AEnemyBaseCharacter."), *InPawn->GetName());
 		return;
 	}
 
@@ -46,23 +56,54 @@ void AEnemyAIController::OnPossess(APawn* InPawn)
 		UE_LOG(LogTemp, Error, TEXT("AEnemyAIController::OnPossess: Cannot find UAiBehaviorComponent on %s."), *EnemyCharacter->GetName());
 		// 注意：AiBehaviorComponent 的 InitializeBehavior 应该在 Character 的 PostInitializeComponents 或 BeginPlay 中被调用
 	}
+	// --- 添加日志 ---
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("AEnemyAIController::OnPossess: Found AiBehaviorComponent on %s."), *EnemyCharacter->GetName());
+	}
+	// ---------------
+
 
 	// 初始化并运行行为树
 	if (BehaviorTreeAsset)
 	{
+		// --- 添加日志 ---
+		UE_LOG(LogTemp, Log, TEXT("AEnemyAIController::OnPossess: BehaviorTreeAsset is set: %s"), *BehaviorTreeAsset->GetName());
+		if (!BehaviorTreeAsset->BlackboardAsset)
+		{
+			UE_LOG(LogTemp, Error, TEXT("AEnemyAIController::OnPossess: BehaviorTreeAsset '%s' has no BlackboardAsset assigned!"), *BehaviorTreeAsset->GetName());
+			return;
+		}
+		UE_LOG(LogTemp, Log, TEXT("AEnemyAIController::OnPossess: Using BlackboardAsset: %s"), *BehaviorTreeAsset->BlackboardAsset->GetName());
+		// ---------------
+
 		// 获取或创建 BlackboardComponent
 		UBlackboardComponent* BlackboardCompPtr = BlackboardComponent.Get(); // 获取原始指针
 		bool bSuccess = UseBlackboard(BehaviorTreeAsset->BlackboardAsset, BlackboardCompPtr); // 传递原始指针的引用
 		if (bSuccess)
 		{
 			BlackboardComponent = BlackboardCompPtr; // 将可能更新的原始指针赋值回 TObjectPtr
+			// --- 修改日志检查方式 ---
+			UE_LOG(LogTemp, Log, TEXT("AEnemyAIController::OnPossess: UseBlackboard successful. BlackboardComponent valid: %s"), BlackboardComponent ? TEXT("true") : TEXT("false"));
+			// -----------------------
 		}
+		// --- 添加日志 ---
+		else
+		{
+			UE_LOG(LogTemp, Error, TEXT("AEnemyAIController::OnPossess: UseBlackboard failed!"));
+			return; // 如果 UseBlackboard 失败，则不继续
+		}
+		// ---------------
 
 		// 检查 BlackboardComponent 是否有效 (UseBlackboard 成功后它应该被设置)
 		if (BlackboardComponent)
 		{
 			// 可以在这里初始化 Blackboard 的一些值，如果需要的话
 			// BlackboardComponent->SetValueAsVector(FName("HomeLocation"), EnemyCharacter->GetActorLocation());
+			// --- 添加日志：检查 SelfActor ---
+			AActor* SelfActor = Cast<AActor>(BlackboardComponent->GetValueAsObject(FName("SelfActor")));
+			UE_LOG(LogTemp, Log, TEXT("AEnemyAIController::OnPossess: Blackboard 'SelfActor' key value: %s"), SelfActor ? *SelfActor->GetName() : TEXT("NULL"));
+			// -----------------------------
 
 			// 运行行为树
 			bool bRunSuccess = RunBehaviorTree(BehaviorTreeAsset);
@@ -77,7 +118,7 @@ void AEnemyAIController::OnPossess(APawn* InPawn)
 		}
 		else
 		{
-			UE_LOG(LogTemp, Error, TEXT("AEnemyAIController::OnPossess: Failed to initialize Blackboard %s for %s."), *BehaviorTreeAsset->BlackboardAsset->GetName(), *EnemyCharacter->GetName());
+			UE_LOG(LogTemp, Error, TEXT("AEnemyAIController::OnPossess: BlackboardComponent is still NULL after UseBlackboard for %s."), *EnemyCharacter->GetName());
 		}
 	}
 	else

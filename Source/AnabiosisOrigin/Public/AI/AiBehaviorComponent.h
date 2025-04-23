@@ -48,6 +48,19 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "AI|Targeting")
 	void SetTargetActor(ACharacter* NewTarget);
 
+	// --- 公开的 AI 逻辑函数 ---
+	/** 检查目标是否在攻击范围内 */
+	UFUNCTION(BlueprintPure, Category = "AI|Checks") // Make BlueprintPure for potential BP use
+	virtual bool IsInAttackRange(const ACharacter* TargetActor) const;
+
+	/** 检查目标是否在追击范围内 */
+	UFUNCTION(BlueprintPure, Category = "AI|Checks") // Make BlueprintPure
+	virtual bool IsInChaseRange(const ACharacter* TargetActor) const;
+
+	/** 检查目标是否在侦测范围内 */
+	UFUNCTION(BlueprintPure, Category = "AI|Checks") // Make BlueprintPure
+	virtual bool IsInDetectionRange(const ACharacter* TargetActor) const;
+
 protected:
 	//~ Begin UActorComponent Interface
 	virtual void BeginPlay() override;
@@ -149,13 +162,6 @@ protected:
 
 	/** 获取一个随机的巡逻点 */
 	virtual FVector GetRandomPatrolPoint() const;
-
-	/** 检查目标是否在攻击范围内 */
-	virtual bool IsInAttackRange(const ACharacter* TargetActor) const;
-	/** 检查目标是否在追击范围内 */
-	virtual bool IsInChaseRange(const ACharacter* TargetActor) const;
-	/** 检查目标是否在侦测范围内 */
-	virtual bool IsInDetectionRange(const ACharacter* TargetActor) const;
 
 	/** 当所属 Actor 死亡时调用的处理函数 (绑定到 OnDeathDelegate) */
 	UFUNCTION()

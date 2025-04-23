@@ -77,7 +77,7 @@ void UAiBehaviorComponent::InitializeBehavior(AEnemyBaseCharacter* OwningEnemy, 
 	}
 	if (bIsInitialized)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("UAiBehaviorComponent::InitializeBehavior: Already initialized."));
+		UE_LOG(LogTemp, Warning, TEXT("UAiBehaviorComponent::InitializeBehavior: Already initialized for %s."), *OwningEnemy->GetName());
 		return;
 	}
 
@@ -85,6 +85,13 @@ void UAiBehaviorComponent::InitializeBehavior(AEnemyBaseCharacter* OwningEnemy, 
 	OwnerController = Cast<AAIController>(OwnerEnemy->GetController());
 	OwnerAttributeSet = OwnerEnemy->GetAttributeSet();
 	UAbilitySystemComponent* OwnerASC = OwnerEnemy->GetAbilitySystemComponent();
+
+	// --- 添加日志 ---
+	UE_LOG(LogTemp, Log, TEXT("UAiBehaviorComponent::InitializeBehavior for %s:"), *OwnerEnemy->GetName());
+	UE_LOG(LogTemp, Log, TEXT("  - OwnerController: %s"), OwnerController ? *OwnerController->GetName() : TEXT("NULL"));
+	UE_LOG(LogTemp, Log, TEXT("  - OwnerAttributeSet: %s"), OwnerAttributeSet ? TEXT("Valid") : TEXT("NULL"));
+	UE_LOG(LogTemp, Log, TEXT("  - OwnerASC: %s"), OwnerASC ? TEXT("Valid") : TEXT("NULL"));
+	// ---------------
 
 	AEnemyAIController* SpecificController = Cast<AEnemyAIController>(OwnerController);
 	if (!SpecificController)
@@ -114,12 +121,19 @@ void UAiBehaviorComponent::InitializeBehavior(AEnemyBaseCharacter* OwningEnemy, 
 	// 设置巡逻原点 (HomeLocation) 和 AttackInterval
 	PatrolOrigin = OwnerEnemy->GetActorLocation();
 	NextPatrolLocation = PatrolOrigin; // 初始巡逻目标
-	if (UBlackboardComponent* BBComp = GetBlackboardComponent())
+
+	// --- 添加日志 ---
+	UBlackboardComponent* BBComp = GetBlackboardComponent();
+	UE_LOG(LogTemp, Log, TEXT("  - Attempting to get BlackboardComponent: %s"), BBComp ? TEXT("Success") : TEXT("Failed"));
+	// ---------------
+	if (BBComp)
 	{
 		BBComp->SetValueAsVector(BlackboardKey_HomeLocation, PatrolOrigin);
-		// --- 设置 AttackInterval 到 Blackboard ---
 		BBComp->SetValueAsFloat(BlackboardKey_AttackInterval, AttackInterval); // 使用 SetValueAsFloat
-		// --------------------------------------
+		// --- 添加日志 ---
+		UE_LOG(LogTemp, Log, TEXT("  - Set Blackboard Key '%s' to %s"), *BlackboardKey_HomeLocation.ToString(), *PatrolOrigin.ToString());
+		UE_LOG(LogTemp, Log, TEXT("  - Set Blackboard Key '%s' to %.2f"), *BlackboardKey_AttackInterval.ToString(), AttackInterval);
+		// ---------------
 	}
 
 	// --- 绑定主人死亡事件 ---
@@ -137,25 +151,32 @@ void UAiBehaviorComponent::InitializeBehavior(AEnemyBaseCharacter* OwningEnemy, 
 	bIsInitialized = true;
 
 	// 根据行为类型设置初始状态 (更新 Blackboard)
+	FGameplayTag InitialStateTag; // 临时变量存储初始状态
 	if (BehaviorType == EEnemyBehaviorType::Patrol || BehaviorType == EEnemyBehaviorType::Territorial)
 	{
-		SetAIStateTag(AI_STATE_TAG("AI.State.Patrolling"));
-		if (UBlackboardComponent* BBComp = GetBlackboardComponent())
+		InitialStateTag = AI_STATE_TAG("AI.State.Patrolling");
+		if (BBComp) // 再次检查 BBComp
 		{
-			BBComp->SetValueAsVector(BlackboardKey_PatrolLocation, GetRandomPatrolPoint());
+			FVector InitialPatrolPoint = GetRandomPatrolPoint();
+			BBComp->SetValueAsVector(BlackboardKey_PatrolLocation, InitialPatrolPoint);
+			// --- 添加日志 ---
+			UE_LOG(LogTemp, Log, TEXT("  - Set Blackboard Key '%s' to %s"), *BlackboardKey_PatrolLocation.ToString(), *InitialPatrolPoint.ToString());
+			// ---------------
 		}
 	}
 	else
 	{
-		SetAIStateTag(AI_STATE_TAG("AI.State.Idle"));
+		InitialStateTag = AI_STATE_TAG("AI.State.Idle");
 	}
+	SetAIStateTag(InitialStateTag); // 设置初始状态并更新 Blackboard
 
-	// 更新日志以包含 AttackInterval
-	UE_LOG(LogTemp, Log, TEXT("UAiBehaviorComponent initialized for %s. Behavior: %s, Initial State Tag (BB): %s, AttackInterval (BB): %.2f"),
+	// --- 修改日志以显示尝试设置的状态 ---
+	UE_LOG(LogTemp, Log, TEXT("UAiBehaviorComponent initialized for %s. Behavior: %s, Attempted Initial State Tag: %s, AttackInterval (Set): %.2f"),
 		*OwnerEnemy->GetName(),
 		*UEnum::GetValueAsString(BehaviorType),
-		*CurrentAIStateTag.ToString(),
+		*InitialStateTag.ToString(), // 显示尝试设置的状态标签
 		AttackInterval);
+	// -----------------------------------
 }
 
 void UAiBehaviorComponent::SetTargetActor(ACharacter* NewTarget)
@@ -293,18 +314,30 @@ void UAiBehaviorComponent::SetAIStateTag(const FGameplayTag& NewStateTag)
 		CurrentAIStateTag = NewStateTag;
 
 		// 更新 Blackboard 中的状态值
-		if (UBlackboardComponent* BBComp = GetBlackboardComponent())
+		UBlackboardComponent* BBComp = GetBlackboardComponent();
+		// --- 添加日志 ---
+		UE_LOG(LogTemp, Verbose, TEXT("UAiBehaviorComponent::SetAIStateTag for %s:"), OwnerEnemy ? *OwnerEnemy->GetName() : TEXT("Unknown"));
+		UE_LOG(LogTemp, Verbose, TEXT("  - New State Tag: %s"), *NewStateTag.ToString());
+		UE_LOG(LogTemp, Verbose, TEXT("  - Getting BlackboardComponent: %s"), BBComp ? TEXT("Success") : TEXT("Failed"));
+		// ---------------
+		if (BBComp)
 		{
-			// --- 改用 SetValueAsName ---
-			// 注意：需要在 Blackboard 资源中将 AIState 键的类型从 GameplayTag 改为 Name
 			BBComp->SetValueAsName(BlackboardKey_AIState, NewStateTag.GetTagName());
-			// ---------------------------
+			// --- 添加日志 ---
+			UE_LOG(LogTemp, Verbose, TEXT("  - Set Blackboard Key '%s' to Name: %s"), *BlackboardKey_AIState.ToString(), *NewStateTag.GetTagName().ToString());
+			// ---------------
 		}
-		else if (OwnerController)
+		else if (OwnerController) // 只有在 Controller 有效时才记录 Blackboard 为 NULL 的警告
 		{
-			UE_LOG(LogTemp, Warning, TEXT("UAiBehaviorComponent::SetAIStateTag: BlackboardComponent is NULL for %s."), *OwnerEnemy->GetName());
+			UE_LOG(LogTemp, Warning, TEXT("UAiBehaviorComponent::SetAIStateTag: BlackboardComponent is NULL for %s when trying to set state %s."), OwnerEnemy ? *OwnerEnemy->GetName() : TEXT("Unknown"), *NewStateTag.ToString());
 		}
 	}
+	// --- 添加日志 ---
+	else
+	{
+		UE_LOG(LogTemp, Verbose, TEXT("UAiBehaviorComponent::SetAIStateTag for %s: State %s is already set."), OwnerEnemy ? *OwnerEnemy->GetName() : TEXT("Unknown"), *NewStateTag.ToString());
+	}
+	// ---------------
 }
 
 UBlackboardComponent* UAiBehaviorComponent::GetBlackboardComponent() const

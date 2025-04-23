@@ -94,22 +94,44 @@ AEnemyBaseCharacter::AEnemyBaseCharacter()
     LoadedHitReactionMontage = nullptr; // Initialize the pointer
     LoadedDeathMontage = nullptr; // Initialize death montage pointer
     bIsDead = false; // Initialize dead state
+    bAttributesInitialized = false; // Initialize initialization flag
 }
 
 void AEnemyBaseCharacter::PostInitializeComponents()
 {
     Super::PostInitializeComponents();
 
-    // 确保在服务器上执行属性初始化
-    if (GetLocalRole() == ROLE_Authority)
+    // 确保在服务器上执行属性初始化，并且只执行一次
+    if (GetLocalRole() == ROLE_Authority && !bAttributesInitialized)
     {
         InitializeAttributesFromDataTable();
+        // 注意：AiBehaviorComponent 的初始化现在在 InitializeAttributesFromDataTable 内部完成
     }
-    // 注意：如果属性需要在客户端上也立即反映（例如用于UI），可能需要RPC或复制机制
+    // --- 移除这里的 AiBehaviorComponent 初始化逻辑，因为它移到了 InitializeAttributesFromDataTable 内部 ---
+    /*
+    if (AbilitySystemComponent && AttributeSet)
+    {
+        // ...
+        if (AiBehaviorComponent)
+        {
+           // ... (Initialization logic removed) ...
+        }
+        // ...
+    }
+    */
+    // -------------------------------------------------------------------------------------------------
 }
 
 void AEnemyBaseCharacter::InitializeAttributesFromDataTable()
 {
+    // --- 添加初始化检查 ---
+    if (bAttributesInitialized)
+    {
+        // UE_LOG(LogTemp, Verbose, TEXT("EnemyBaseCharacter %s: Attributes already initialized."), *GetName()); // 可以用 Verbose 级别记录
+        return;
+    }
+    // -----------------------
+
     if (!AttributeDataTable)
     {
         UE_LOG(LogTemp, Error, TEXT("EnemyBaseCharacter %s: AttributeDataTable is not set!"), *GetName());
@@ -225,6 +247,12 @@ void AEnemyBaseCharacter::InitializeAttributesFromDataTable()
         UE_LOG(LogTemp, Error, TEXT("EnemyBaseCharacter %s: AiBehaviorComponent is NULL! Cannot initialize AI behavior."), *GetName());
     }
     // --------------------------
+
+    // --- 设置初始化标志位 ---
+    bAttributesInitialized = true;
+    // -----------------------
+
+    UE_LOG(LogTemp, Log, TEXT("Enemy %s finished initializing attributes, montages, and AI behavior from DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
 
     // 应用其他从数据表读取的配置，例如 AI 参数 (如果需要)
     // GetCharacterMovement()->MaxWalkSpeed = ... Row->MovementSpeed ... (如果数据表中有)
