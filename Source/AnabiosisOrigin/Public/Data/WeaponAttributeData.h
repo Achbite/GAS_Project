@@ -14,6 +14,7 @@
 #include "Engine/DataTable.h"
 #include "GameplayEffect.h" // Include for TSubclassOf<UGameplayEffect>
 #include "UObject/SoftObjectPtr.h" // Include for TSoftClassPtr
+#include "GameplayTagContainer.h" // Include for FGameplayTag
 #include "WeaponAttributeData.generated.h"
 
 class AWeaponBase; // Forward declaration
@@ -39,8 +40,12 @@ struct FWeaponAttributeData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Equipment|Weapon|GrantedAttributes", meta = (ClampMin = "0.0", ClampMax = "1.0")) // Refined Category
 	float CriticalChanceBonus = 0.0f;
 
+	/** 装备此武器时设置给角色的初始攻击能力标签 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Equipment|Weapon|Abilities") // New Category
+	FGameplayTag InitialAttackTag; // New Property
+
 	// --- 可以添加更多武器特有的属性 ---
 	// 例如：攻击速度修正、特殊能力触发效果等
 
-	FWeaponAttributeData() : GrantedAttributesEffect(nullptr), BaseAttackPowerBonus(0.0f), CriticalChanceBonus(0.0f) {}
+	FWeaponAttributeData() : GrantedAttributesEffect(nullptr), BaseAttackPowerBonus(0.0f), CriticalChanceBonus(0.0f), InitialAttackTag(FGameplayTag::EmptyTag) {} // Initialize new property
 };

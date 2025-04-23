@@ -39,6 +39,7 @@
 #include "Data/WeaponAttributeData.h" // Include Weapon Data Struct
 #include "AbilitySystemComponent.h" // Needed for applying GE
 #include "UObject/UObjectGlobals.h" // Needed for LoadSynchronous
+#include "GameplayTagContainer.h" // Ensure GameplayTagContainer is included
 
 AAnabiosisOriginCharacter::AAnabiosisOriginCharacter()
 {
@@ -430,6 +431,20 @@ void AAnabiosisOriginCharacter::SpawnAndAttachWeapon(const FName& InWeaponDataRo
                 UE_LOG(LogTemp, Warning, TEXT("  Failed to create spec for GrantedAttributesEffect: %s"), *WeaponRow->GrantedAttributesEffect->GetName());
             }
         }
+
+        // --- Set Initial Attack Tag ---
+        if (WeaponRow->InitialAttackTag.IsValid())
+        {
+            SetAttackAbilityTag(WeaponRow->InitialAttackTag); // Use the tag from the weapon data
+            UE_LOG(LogTemp, Log, TEXT("  Set AttackAbilityTag to %s from weapon data."), *WeaponRow->InitialAttackTag.ToString());
+        }
+        else
+        {
+            // Optionally clear the tag or set a default if the weapon doesn't specify one
+            // SetAttackAbilityTag(FGameplayTag::EmptyTag);
+             UE_LOG(LogTemp, Log, TEXT("  Weapon data '%s' does not specify an InitialAttackTag."), *InWeaponDataRowName.ToString());
+        }
+        // ----------------------------
     }
      else
     {

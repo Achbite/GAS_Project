@@ -35,6 +35,7 @@
 #include "Abilities/GameplayAbility.h"
 #include "AbilitySystemComponent.h"
 #include "Abilities/Tasks/AbilityTask_PlayMontageAndWait.h"
+#include "GameplayTagContainer.h" // Include for FGameplayTag
 #include "BaseAttack.generated.h"
 
 /**
@@ -81,9 +82,16 @@ protected:
     /** 重写EndAbility以确保清理 */
     virtual void EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled) override;
 
+    /** 处理 Gameplay Tag 变化的回调 */
+    UFUNCTION() // Needs to be UFUNCTION to bind delegate
+    void HandleGameplayTagEvent(FGameplayTag Tag, int32 NewCount); // New Function
+
 private:
     /** 管理动画播放的任务 */
     UPROPERTY()
     UAbilityTask_PlayMontageAndWait* MontageTask;
+
+    /** Gameplay Tag 监听器的委托句柄 */
+    FDelegateHandle GameplayTagEventHandle; // New Property
 };
 
