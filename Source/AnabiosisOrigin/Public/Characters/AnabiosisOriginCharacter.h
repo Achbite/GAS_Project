@@ -115,6 +115,10 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Character|State")
 	bool IsDead() const;
 
+	/** 返回角色的受击反应蒙太奇 */
+	UFUNCTION(BlueprintCallable, Category = "Animation")
+	virtual UAnimMontage* GetHitReactionMontage() const { return HitReactionMontage; }
+
 	// --- Setters & Modifiers ---
 	UFUNCTION(BlueprintCallable, Category = "Abilities")
 	void SetAttackAbilityTag(const FGameplayTag& NewTag);

@@ -119,6 +119,10 @@ struct FAnabiosisAttributeData : public FTableRowBase
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
 	TObjectPtr<UAnimMontage> DeathMontage; // 死亡蒙太奇
 
+	/** 受击时播放的动画蒙太奇 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation")
+	TObjectPtr<UAnimMontage> HitReactionMontage; // 受击反应蒙太奇
+
 	FAnabiosisAttributeData() = default; // 使用默认构造函数
 };
 

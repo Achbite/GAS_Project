@@ -19,6 +19,7 @@
 #include "CoreMinimal.h"
 #include "Animation/AnimNotifies/AnimNotifyState.h"
 #include "Engine/EngineTypes.h" 
+#include "GameplayTagContainer.h" // Include Gameplay Tag Container
 #include "WeaponHitNotify.generated.h"
 
 // 日志类别声明
@@ -35,7 +36,7 @@ class UAnimMontage;
  * @brief 武器命中检测通知状态。
  * 
  * 在动画状态的持续时间内，使用武器插槽的起点和终点执行扫描检测（球体或射线）。
- * 对首次命中的、属于指定通道（默认为 Enemy）的 Character Actor 应用伤害和播放受击蒙太奇。
+ * 对首次命中的、属于指定通道（默认为 Enemy）的 Character Actor 应用伤害、播放受击蒙太奇，并施加 Gameplay Tag。
  * 通过查找附加到 Owner Actor 上的子 Actor 中的 PrimitiveComponent 来定位武器。
  */
 UCLASS(Blueprintable, meta = (DisplayName = "Weapon Hit Notify")) // 使其在蓝图中更易识别
@@ -84,6 +85,10 @@ protected: // 改为 protected，因为这些属性主要在内部使用或由�
 	/** 命中敌人时播放的受击动画蒙太奇 (可选，如果敌人自身没有配置，则使用此蒙太奇) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WeaponHit|Reaction", meta = (DisplayName = "Fallback Hit Reaction Montage"))
 	TObjectPtr<UAnimMontage> HitReactionMontage; // 备选受击反应蒙太奇
+
+	/** 命中时施加给目标的 Gameplay Tag (例如 State.HitReact) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "WeaponHit|Reaction", meta = (DisplayName = "Hit React Tag"))
+	FGameplayTag HitReactTag; // 施加的受击状态 Tag
 
 	// --- Debug Properties ---
 	/** 是否启用调试绘制（显示扫描轨迹、插槽位置和命中点） */

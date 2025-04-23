@@ -44,9 +44,11 @@
 #include "GameFramework/Controller.h"
 #include "Engine/DamageEvents.h"
 #include "AbilitySystemComponent.h"
+#include "AbilitySystemBlueprintLibrary.h" // Include for Ability System functions
 #include "Attributes/EnemyAttributeSet.h" // 包含敌人属性集头文件
 #include "Attributes/AnabiosisAttributeSet.h" // 包含玩家属性集头文件
 #include "Containers/Set.h" // 包含 TSet
+#include "GameplayTagContainer.h" // Include Gameplay Tag Container
 
 // 定义日志类别
 DEFINE_LOG_CATEGORY(LogWeaponHitNotify);
@@ -284,6 +286,25 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 				DrawDebugSphere(GetWorld(), Hit.ImpactPoint, 10.f, 12, FColor::Green, false, DebugDisplayTime);
 				if (GEngine) GEngine->AddOnScreenDebugMessage(-1, DebugDisplayTime, FColor::Green, FString::Printf(TEXT("命中：%s"), *HitCharacter->GetName()));
 			}
+
+			// --- 施加 Gameplay Tag ---
+			UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitCharacter);
+			if (TargetASC && HitReactTag.IsValid())
+			{
+				TargetASC->AddLooseGameplayTag(HitReactTag);
+				// 可选：添加一个短暂的 Tag 持续时间，或者依赖其他系统移除 Tag
+				// TargetASC->AddGameplayTag(HitReactTag); // 如果需要计数
+				UE_LOG(LogWeaponHitNotify, Log, TEXT("  向 %s 添加了 Gameplay Tag: %s"), *HitCharacter->GetName(), *HitReactTag.ToString());
+			}
+			else if (!TargetASC)
+			{
+				UE_LOG(LogWeaponHitNotify, Warning, TEXT("  无法添加 Gameplay Tag：目标 %s 没有 AbilitySystemComponent。"), *HitCharacter->GetName());
+			}
+			else // Tag is not valid
+			{
+				UE_LOG(LogWeaponHitNotify, Warning, TEXT("  无法添加 Gameplay Tag：HitReactTag 未在通知 %s 中设置。"), *GetName());
+			}
+
 
 			// --- 获取并播放受击蒙太奇 ---
 			UAnimMontage* MontageToPlay = nullptr;

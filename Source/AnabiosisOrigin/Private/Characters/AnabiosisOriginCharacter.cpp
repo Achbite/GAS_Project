@@ -33,6 +33,7 @@
 #include "Attributes/AnabiosisAttributeSet.h" 
 #include "Data/AnabiosisAttributeData.h" 
 #include "Animation/AnimInstance.h" // Include for AnimInstance
+#include "Engine/DataTable.h" // Needed if loading data here
 
 AAnabiosisOriginCharacter::AAnabiosisOriginCharacter()
 {
@@ -73,12 +74,29 @@ AAnabiosisOriginCharacter::AAnabiosisOriginCharacter()
     CurrentClass = EAnabiosisPlayerClass::Warrior; // 设置默认职业
     LoadedDeathMontage = nullptr; // Initialize death montage pointer
     bIsDead = false; // Initialize dead state
+    HitReactionMontage = nullptr; // Initialize pointer
 }
 
 void AAnabiosisOriginCharacter::BeginPlay()
 {
     Super::BeginPlay();
     BindAttributeChangeListeners(); // 绑定监听器
+
+    // --- IMPORTANT: Add your data loading logic here ---
+    // Example: Load FAnabiosisAttributeData from a DataTable based on character class/level
+    // UDataTable* AttributeDataTable = ...; // Get your data table asset
+    // FName RowName = ...; // Determine the correct row name for this character
+    // FAnabiosisAttributeData* RowData = AttributeDataTable->FindRow<FAnabiosisAttributeData>(RowName, TEXT("Loading Attribute Data"));
+    // if (RowData)
+    // {
+    //     this->HitReactionMontage = RowData->HitReactionMontage; 
+    //     // Initialize other properties from RowData as needed...
+    // }
+    // else
+    // {
+    //     UE_LOG(LogTemp, Error, TEXT("Could not find attribute data row %s for character %s"), *RowName.ToString(), *GetName());
+    // }
+    // -----------------------------------------------------
 }
 
 UAbilitySystemComponent* AAnabiosisOriginCharacter::GetAbilitySystemComponent() const
