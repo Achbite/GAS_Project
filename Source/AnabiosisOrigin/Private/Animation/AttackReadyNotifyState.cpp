@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright (C) 2025 [Wang]
  * 
  * This program is free software: you can redistribute it and/or modify 
@@ -14,39 +14,56 @@
  * You should have received a copy of the GNU General Public License 
  * along with this program.  If not, see https://www.gnu.org/licenses/. 
  */
+
+/*
+* 文件名: AttackReadyNotifyState.cpp
+* 功能描述： 实现动画通知状态 UAttackReadyNotifyState 的逻辑。
+*            用于标记动画中可以被其他动作打断的区间（占位符）。
+* 结构：
+* - NotifyBegin：通知开始时调用（占位）。
+* - NotifyEnd：通知结束时调用（占位）。
+* @note 当前实现为空，需要根据具体需求添加逻辑，例如通过 GameplayTag 控制打断。
+*/
+
 #include "Animation/AttackReadyNotifyState.h"
-#include "Characters/AnabiosisOriginCharacter.h"
+#include "Characters/AnabiosisOriginCharacter.h" // 可能需要包含角色头文件
 #include "Animation/AnimInstance.h"
 
 void UAttackReadyNotifyState::NotifyBegin(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation, float TotalDuration)
 {
-    if (!MeshComp)
-    {
-        return;
-    }
-    
-    // 设置动画蒙太奇为可打断
-    UAnimInstance* AnimInstance = MeshComp->GetAnimInstance();
-    if (AnimInstance)
-    {
-        // 在这里可以设置蒙太奇为可打断
-        // 目前只是一个占位，实际实现需要根据项目需求添加
-    }
+	// 检查 MeshComp 是否有效
+	if (!MeshComp)
+	{
+		return;
+	}
+
+	// 获取动画实例
+	UAnimInstance* AnimInstance = MeshComp->GetAnimInstance();
+	if (AnimInstance)
+	{
+		// 在这里可以添加逻辑，例如：
+		// - 获取角色的 AbilitySystemComponent
+		// - 添加一个表示“可被中断”的 GameplayTag (例如 "State.CanBeInterrupted")
+		// UE_LOG(LogTemp, Verbose, TEXT("攻击可打断窗口开始"));
+	}
 }
 
 void UAttackReadyNotifyState::NotifyEnd(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation)
 {
-    if (!MeshComp)
-    {
-        return;
-    }
-    
-    // 动画蒙太奇恢复不可打断
-    UAnimInstance* AnimInstance = MeshComp->GetAnimInstance();
-    if (AnimInstance)
-    {
-        // 在这里可以设置蒙太奇为不可打断
-        // 目前只是一个占位，实际实现需要根据项目需求添加
-    }
+	// 检查 MeshComp 是否有效
+	if (!MeshComp)
+	{
+		return;
+	}
+
+	// 获取动画实例
+	UAnimInstance* AnimInstance = MeshComp->GetAnimInstance();
+	if (AnimInstance)
+	{
+		// 在这里可以添加逻辑，例如：
+		// - 获取角色的 AbilitySystemComponent
+		// - 移除表示“可被中断”的 GameplayTag
+		// UE_LOG(LogTemp, Verbose, TEXT("攻击可打断窗口结束"));
+	}
 }
 
