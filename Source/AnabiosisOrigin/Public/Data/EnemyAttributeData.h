@@ -73,53 +73,53 @@ struct FEnemyAttributeData : public FTableRowBase
 	int32 Level = 1; // 等级
 
 	// --- 战斗属性 (通常是初始值或基础值) ---
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Combat", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Attributes|Combat", meta = (ClampMin = "1.0")) // Refined Category
 	float InitialHealth = 100.0f; // 初始生命值
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Combat", meta = (ClampMin = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Attributes|Combat", meta = (ClampMin = "1.0")) // Refined Category
 	float InitialMaxHealth = 100.0f; // 初始最大生命值
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Combat", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Attributes|Combat", meta = (ClampMin = "0.0")) // Refined Category
 	float AttackPower = 10.0f; // 攻击力
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Combat", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Attributes|Combat", meta = (ClampMin = "0.0")) // Refined Category
 	float Defense = 5.0f; // 防御力
 
 	// --- AI 行为参数 ---
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|AI", meta = (ClampMin = "0.0", ToolTip = "发现玩家的距离"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|AI|Parameters", meta = (ClampMin = "0.0", ToolTip = "发现玩家的距离")) // Refined Category
 	float DetectionRange = 1000.0f; // 侦测范围
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|AI", meta = (ClampMin = "0.0", ToolTip = "巡逻行为的半径 (如果适用)"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|AI|Parameters", meta = (ClampMin = "0.0", ToolTip = "巡逻行为的半径 (如果适用)")) // Refined Category
 	float PatrolRadius = 500.0f; // 巡逻半径
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|AI", meta = (ClampMin = "0.0", ToolTip = "停止追击玩家的最大距离"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|AI|Parameters", meta = (ClampMin = "0.0", ToolTip = "停止追击玩家的最大距离")) // Refined Category
 	float ChaseRange = 1500.0f; // 追击范围
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|AI", meta = (ClampMin = "0.0", ToolTip = "触发攻击行为所需的仇恨阈值 (如果使用仇恨系统)"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|AI|Parameters", meta = (ClampMin = "0.0", ToolTip = "触发攻击行为所需的仇恨阈值 (如果使用仇恨系统)")) // Refined Category
 	float AggroThreshold = 50.0f; // 仇恨阈值
 
 	// --- 战斗行为参数 ---
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Combat Behavior", meta = (ClampMin = "0.0", ToolTip = "发动攻击的距离"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|AI|CombatBehavior", meta = (ClampMin = "0.0", ToolTip = "发动攻击的距离")) // Refined Category
 	float AttackRange = 150.0f; // 攻击范围
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Combat Behavior", meta = (ClampMin = "0.1", ToolTip = "两次攻击之间的最小间隔时间"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|AI|CombatBehavior", meta = (ClampMin = "0.1", ToolTip = "两次攻击之间的最小间隔时间")) // Refined Category
 	float AttackInterval = 2.0f; // 攻击间隔
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Combat Behavior", meta = (ToolTip = "是否可以使用特殊攻击 (需要 AI 逻辑支持)"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|AI|CombatBehavior", meta = (ToolTip = "是否可以使用特殊攻击 (需要 AI 逻辑支持)")) // Refined Category
 	bool bCanUseSpecialAttack = false; // 是否能使用特殊攻击
 
 	// --- 武器 ---
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Weapon", meta = (ToolTip = "武器属性数据表中的行名"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Equipment|Weapon", meta = (ToolTip = "武器属性数据表中的行名")) // Refined Category
 	FName WeaponDataRowName = NAME_None;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Weapon", meta = (ToolTip = "武器附加到骨骼上的插槽名称"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Equipment|Weapon", meta = (ToolTip = "武器附加到骨骼上的插槽名称")) // Refined Category
 	FName WeaponAttachSocketName = "hand_rSocket"; // Default socket
 
 	// --- 动画 ---
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Animation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Animation|Reactions") // Refined Category
 	TObjectPtr<UAnimMontage> HitReactionMontage; // 受击反应蒙太奇
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Animation")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Animation|Reactions") // Refined Category
 	TObjectPtr<UAnimMontage> DeathMontage; // 死亡蒙太奇
 
 	// --- 奖励系统 ---
@@ -130,7 +130,7 @@ struct FEnemyAttributeData : public FTableRowBase
 	float LootChance = 0.5f; // 掉落几率
 
 	// --- 能力 ---
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Abilities")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Abilities") // Kept Category
 	TArray<TSubclassOf<UGameplayAbility>> GrantedAbilities;
 
 	FEnemyAttributeData() = default; // 使用默认构造函数

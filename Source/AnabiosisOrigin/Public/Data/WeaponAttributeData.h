@@ -24,19 +24,19 @@ struct FWeaponAttributeData : public FTableRowBase
 	GENERATED_BODY()
 
 	/** 要生成的武器 Actor 类资产的软指针 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Weapon")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Equipment|Weapon|Definition") // Refined Category
 	TSoftClassPtr<AWeaponBase> WeaponActorClassPtr; // Changed from TSubclassOf
 
 	/** 装备此武器时授予的属性 GameplayEffect (可选) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Attributes")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Equipment|Weapon|GrantedAttributes") // Refined Category
 	TSubclassOf<UGameplayEffect> GrantedAttributesEffect;
 
 	/** 武器基础攻击力加成 (示例) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Attributes", meta = (ClampMin = "0.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Equipment|Weapon|GrantedAttributes", meta = (ClampMin = "0.0")) // Refined Category
 	float BaseAttackPowerBonus = 0.0f;
 
 	/** 武器暴击率加成 (示例) */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Attributes", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AttackComponent|Equipment|Weapon|GrantedAttributes", meta = (ClampMin = "0.0", ClampMax = "1.0")) // Refined Category
 	float CriticalChanceBonus = 0.0f;
 
 	// --- 可以添加更多武器特有的属性 ---
