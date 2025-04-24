@@ -65,8 +65,6 @@ EBTNodeResult::Type UBTTask_ActivateAbilityByTag::ExecuteTask(UBehaviorTreeCompo
 		// 如果没有筛选标签，则所有可激活能力都符合条件
 		for (const FGameplayAbilitySpec& Spec : ActivatableAbilities)
 		{
-			// Add pointers to all specs (const_cast needed if modification is intended, but here just for selection)
-			// It's generally safer to work with indices if possible, but pointers are okay for read-only selection.
 			FilteredAbilities.Add(const_cast<FGameplayAbilitySpec*>(&Spec));
 		}
 	}

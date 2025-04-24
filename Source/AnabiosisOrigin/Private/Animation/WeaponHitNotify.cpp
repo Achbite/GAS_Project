@@ -248,11 +248,6 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 				{
 					const float MontagePlayRate = 1.0f;
 					const float MontageDuration = AnimInstance->Montage_Play(MontageToPlay, MontagePlayRate);
-					// UE_LOG(LogWeaponHitNotify, Log, TEXT("  播放蒙太奇 %s (时长: %.2f) 在 %s 上。"), *MontageToPlay->GetName(), MontageDuration, *HitCharacter->GetName()); // Optional Log
-
-					// --- 移除移动禁用和定时器逻辑 ---
-					// if (PlayerChar && MontageDuration > 0.f) { ... }
-					// ---------------------------------
 				}
 				else
 				{
@@ -283,9 +278,9 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 						{
 							DamageToApply = AttackerAttributeSet->GetAttackPower(); 
 						}
-						// else { UE_LOG(LogWeaponHitNotify, Warning, ...); } // Optional Warning
+
 					}
-					// else { UE_LOG(LogWeaponHitNotify, Warning, ...); } // Optional Warning
+
 				}
 				else
 				{
@@ -300,20 +295,17 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 							{
 								DamageToApply = AttackerAttributeSet->GetAttackPower(); 
 							}
-							// else { UE_LOG(LogWeaponHitNotify, Warning, ...); } // Optional Warning
+
 						}
-						// else { UE_LOG(LogWeaponHitNotify, Warning, ...); } // Optional Warning
+
 					}
-					// else { UE_LOG(LogWeaponHitNotify, Warning, ...); } // Optional Warning
+
 				}
 
 				if (OwnerController && DamageToApply > 0.f)
 				{
 					FPointDamageEvent DamageEvent(DamageToApply, Hit, (TraceEnd - TraceStart).GetSafeNormal(), UDamageType::StaticClass());
 					float AppliedDamage = HitCharacter->TakeDamage(DamageToApply, DamageEvent, OwnerController, OwnerActor);
-
-					// UE_LOG(LogWeaponHitNotify, Log, TEXT("  对 %s 应用了 %.1f 点伤害 (请求 %.1f)"), *HitCharacter->GetName(), AppliedDamage, DamageToApply); // Optional Log
-					// if (bDebugTrace && GEngine) GEngine->AddOnScreenDebugMessage(-1, DebugDisplayTime, FColor::Orange, FString::Printf(TEXT("伤害：%.1f -> %s"), AppliedDamage, *HitCharacter->GetName())); // Removed GEngine
 				}
 				else if (!OwnerController)
 				{
@@ -328,10 +320,5 @@ void UWeaponHitNotify::NotifyEnd(USkeletalMeshComponent * MeshComp, UAnimSequenc
 {
 	HitActors.Empty(); 
 	CachedWeaponMeshComp = nullptr; 
-
-	// --- 移除定时器清理逻辑 ---
-	// if (UWorld* World = MeshComp ? MeshComp->GetWorld() : nullptr) { ... }
-	// CharacterMovementTimers.Empty();
-	// -------------------------
 }
 

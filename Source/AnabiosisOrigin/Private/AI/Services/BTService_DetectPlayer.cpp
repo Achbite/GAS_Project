@@ -75,12 +75,12 @@ void UBTService_DetectPlayer::TickNode(UBehaviorTreeComponent& OwnerComp, uint8*
 	// Log entry point
 	AAIController* ControllerForLog = IsValid(CachedOwnerController) ? CachedOwnerController.Get() : OwnerComp.GetAIOwner();
 	APawn* LogPawn = IsValid(CachedOwnerCharacter) ? CachedOwnerCharacter.Get() : (ControllerForLog ? ControllerForLog->GetPawn() : nullptr);
-	// UE_LOG(LogTemp, Verbose, TEXT("DetectPlayer Service Tick: Controller: %s, Pawn: %s"), ControllerForLog ? *ControllerForLog->GetName() : TEXT("NULL"), LogPawn ? *LogPawn->GetName() : TEXT("NULL"));
+	UE_LOG(LogTemp, Verbose, TEXT("DetectPlayer Service Tick: Controller: %s, Pawn: %s"), ControllerForLog ? *ControllerForLog->GetName() : TEXT("NULL"), LogPawn ? *LogPawn->GetName() : TEXT("NULL"));
 
 	// 1. Get/Validate Components
 	if (!CacheComponents(OwnerComp))
 	{
-		// UE_LOG(LogTemp, Verbose, TEXT("DetectPlayer Service: Failed to get/cache required components. Controller: %s, Pawn: %s"), ControllerForLog ? *ControllerForLog->GetName() : TEXT("NULL"), LogPawn ? *LogPawn->GetName() : TEXT("NULL"));
+		UE_LOG(LogTemp, Verbose, TEXT("DetectPlayer Service: Failed to get/cache required components. Controller: %s, Pawn: %s"), ControllerForLog ? *ControllerForLog->GetName() : TEXT("NULL"), LogPawn ? *LogPawn->GetName() : TEXT("NULL"));
 		return;
 	}
 
@@ -91,7 +91,7 @@ void UBTService_DetectPlayer::TickNode(UBehaviorTreeComponent& OwnerComp, uint8*
 		{
 			CachedBlackboardComp->SetValueAsObject(TargetActorKey.SelectedKeyName, nullptr);
 			CachedBlackboardComp->SetValueAsName(AIStateKey.SelectedKeyName, AI_STATE_TAG_NAME("AI.State.Dead"));
-			// UE_LOG(LogTemp, Verbose, TEXT("DetectPlayer Service: Owner %s is dead, setting state to Dead."), *CachedOwnerCharacter->GetName());
+			UE_LOG(LogTemp, Verbose, TEXT("DetectPlayer Service: Owner %s is dead, setting state to Dead."), *CachedOwnerCharacter->GetName());
 		}
 		return;
 	}

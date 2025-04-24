@@ -265,19 +265,16 @@ void UAIWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequ
 						{
 							DamageToApply = AttackerAttributeSet->GetAttackPower(); 
 						}
-						// else { UE_LOG(LogAIWeaponHitNotify, Warning, ...); } // Optional Warning
 					}
-					// else { UE_LOG(LogAIWeaponHitNotify, Warning, ...); } // Optional Warning
+
 				}
-				// else { UE_LOG(LogAIWeaponHitNotify, Warning, ...); } // Optional Warning
+
 
 
 				if (OwnerController && DamageToApply > 0.f)
 				{
 					FPointDamageEvent DamageEvent(DamageToApply, Hit, (TraceEnd - TraceStart).GetSafeNormal(), UDamageType::StaticClass());
 					float AppliedDamage = HitPlayerCharacter->TakeDamage(DamageToApply, DamageEvent, OwnerController, OwnerActor);
-
-					// UE_LOG(LogAIWeaponHitNotify, Log, TEXT("  AI 对玩家 %s 应用了 %.1f 点伤害 (请求 %.1f)"), *HitPlayerCharacter->GetName(), AppliedDamage, DamageToApply); // Optional Log
 				}
 				else if (!OwnerController)
 				{
@@ -292,9 +289,4 @@ void UAIWeaponHitNotify::NotifyEnd(USkeletalMeshComponent * MeshComp, UAnimSeque
 {
 	HitActors.Empty(); 
 	CachedWeaponMeshComp = nullptr; 
-
-	// --- 移除定时器清理逻辑 ---
-	// if (UWorld* World = MeshComp ? MeshComp->GetWorld() : nullptr) { ... }
-	// CharacterMovementTimers.Empty();
-	// -------------------------
 }
