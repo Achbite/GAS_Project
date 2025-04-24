@@ -41,11 +41,11 @@ AAnabiosisOriginGameMode::AAnabiosisOriginGameMode()
 	{
 		DefaultPawnClass = PlayerPawnBPClass.Class;
 	}
-	else
-	{
-		// 如果找不到蓝图，记录错误
-		UE_LOG(LogAnabiosisOrigin, Error, TEXT("Failed to find DefaultPawnClass blueprint '/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter'."));
-	}
+	// else
+	// {
+		// 如果找不到蓝图，记录错误 (注释掉以清理日志)
+		// UE_LOG(LogAnabiosisOrigin, Error, TEXT("Failed to find DefaultPawnClass blueprint '/Game/ThirdPerson/Blueprints/BP_ThirdPersonCharacter'."));
+	// }
 
 	// 设置默认玩家控制器类
 	PlayerControllerClass = AAnabiosisPlayerController::StaticClass();
@@ -98,10 +98,10 @@ void AAnabiosisOriginGameMode::DebugMessage(const FString& Message, EAnabiosisDe
 			// 获取类别名称字符串
 			const FString CategoryName = StaticEnum<EAnabiosisDebugCategory>()->GetNameStringByValue(static_cast<int64>(Category));
 
-			// 输出到日志
+			// 输出到日志 (保留，由调试系统控制)
 			UE_LOG(LogAnabiosisOrigin, Log, TEXT("[%s] %s"), *CategoryName, *Message);
 
-			// 输出到屏幕 (如果 GEngine 有效)
+			// 输出到屏幕 (如果 GEngine 有效) (保留，由调试系统控制)
 			if (GEngine)
 			{
 				// 使用黄色显示调试信息

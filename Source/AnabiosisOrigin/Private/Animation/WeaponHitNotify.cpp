@@ -43,8 +43,8 @@
 #include "Attributes/AnabiosisAttributeSet.h" 
 #include "Containers/Set.h" 
 #include "GameplayTagContainer.h" 
-// #include "GameFramework/CharacterMovementComponent.h" // Removed
-// #include "TimerManager.h" // Removed
+// #include "GameFramework/CharacterMovementComponent.h" // 已移除
+// #include "TimerManager.h" // 已移除
 
 // 定义日志类别
 DEFINE_LOG_CATEGORY(LogWeaponHitNotify);
@@ -59,7 +59,7 @@ UWeaponHitNotify::UWeaponHitNotify()
 	WeaponEndSocketName = FName("weapon_end");
 	TraceRadius = 2.0f;
 	TraceChannel = COLLISION_ENEMY; 
-	bDebugTrace = false; // Default to false
+	bDebugTrace = false; // 默认禁用调试追踪
 	DebugDisplayTime = 2.0f;
 	bApplyDamage = true;
 	BaseDamage = 10.0f; 
@@ -109,6 +109,7 @@ UPrimitiveComponent* FindAttachedWeaponComponent(const AActor* OwnerActor, FName
 		}
 	}
 
+	// 保留此警告，因为它指示了潜在的设置问题
 	UE_LOG(LogWeaponHitNotify, Warning, TEXT("查找武器组件：在 '%s' 或其附加物上未找到同时包含插槽 '%s' 和 '%s' 的武器组件。"),
 			*OwnerActor->GetName(), *StartSocketName.ToString(), *EndSocketName.ToString());
 
@@ -126,7 +127,7 @@ void UWeaponHitNotify::NotifyBegin(USkeletalMeshComponent * MeshComp, UAnimSeque
 
 	HitActors.Empty(); 
 	CachedWeaponMeshComp = nullptr; 
-	// CharacterMovementTimers.Empty(); // Removed
+	// CharacterMovementTimers.Empty(); // 已移除
 
 	CachedWeaponMeshComp = FindAttachedWeaponComponent(OwnerActor, WeaponStartSocketName, WeaponEndSocketName, bDebugTrace, DebugDisplayTime);
 }
@@ -144,7 +145,7 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 
 	if (CurrentStartLocation.IsZero() || CurrentEndLocation.IsZero())
 	{
-		// Keep this warning as it indicates a setup issue
+		// 保留此警告，因为它指示了设置问题
 		UE_LOG(LogWeaponHitNotify, Warning, TEXT("通知 Tick：插槽 '%s' 或 '%s' 在组件 '%s' 上返回零位置。跳过扫描。"),
 				*WeaponStartSocketName.ToString(), *WeaponEndSocketName.ToString(), *CachedWeaponMeshComp->GetName());
 		return;
@@ -173,11 +174,12 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 	FVector TraceEnd = CurrentEndLocation;   
 	TEnumAsByte<ETraceTypeQuery> TraceType = UEngineTypes::ConvertToTraceType(TraceChannel); 
 
+	// KismetSystemLibrary 函数已包含基于 bDebugTrace 的调试绘制逻辑
 	if (TraceRadius > 0.0f)
 	{
 		bHit = UKismetSystemLibrary::SphereTraceMulti(
 			CachedWeaponMeshComp->GetWorld(), TraceStart, TraceEnd, TraceRadius, TraceType, false, ActorsToIgnore,
-			bDebugTrace ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None, 
+			bDebugTrace ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None, // 调试绘制
 			HitResults, true, 
 			FLinearColor::Red, FLinearColor::Green, DebugDisplayTime); 
 	}
@@ -185,7 +187,7 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 	{
 		bHit = UKismetSystemLibrary::LineTraceMulti(
 			CachedWeaponMeshComp->GetWorld(), TraceStart, TraceEnd, TraceType, false, ActorsToIgnore,
-			bDebugTrace ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None,
+			bDebugTrace ? EDrawDebugTrace::ForDuration : EDrawDebugTrace::None, // 调试绘制
 			HitResults, true,
 			FLinearColor::Red, FLinearColor::Green, DebugDisplayTime);
 	}
@@ -204,14 +206,11 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 
 			HitActors.Add(HitCharacter); 
 
-			// UE_LOG(LogWeaponHitNotify, Log, TEXT("武器命中：%s (本轮通知首次命中)"), *HitCharacter->GetName()); // Optional Log
-
 			// --- 施加 Gameplay Tag ---
 			UAbilitySystemComponent* TargetASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitCharacter);
 			if (TargetASC && HitReactTag.IsValid())
 			{
 				TargetASC->AddLooseGameplayTag(HitReactTag);
-				// UE_LOG(LogWeaponHitNotify, Log, TEXT("  向 %s 添加了 Gameplay Tag: %s"), *HitCharacter->GetName(), *HitReactTag.ToString()); // Optional Log
 			}
 			else if (!TargetASC)
 			{
@@ -238,7 +237,7 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 
 			if (!MontageToPlay)
 			{
-				MontageToPlay = HitReactionMontage; // Use fallback
+				MontageToPlay = HitReactionMontage; // 使用备用蒙太奇
 			}
 
 			if (MontageToPlay)
@@ -267,6 +266,7 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 				AController* OwnerController = OwnerCharacter ? OwnerCharacter->GetController() : nullptr; 
 
 				float DamageToApply = BaseDamage; 
+				// 尝试从攻击者获取攻击力 (玩家或敌人)
 				AAnabiosisOriginCharacter* AttackerCharacter = Cast<AAnabiosisOriginCharacter>(OwnerActor);
 				if (AttackerCharacter)
 				{
@@ -278,9 +278,7 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 						{
 							DamageToApply = AttackerAttributeSet->GetAttackPower(); 
 						}
-
 					}
-
 				}
 				else
 				{
@@ -295,11 +293,8 @@ void UWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequen
 							{
 								DamageToApply = AttackerAttributeSet->GetAttackPower(); 
 							}
-
 						}
-
 					}
-
 				}
 
 				if (OwnerController && DamageToApply > 0.f)
