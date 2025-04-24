@@ -1,4 +1,4 @@
-/*
+/* 
  * Copyright (C) 2025 [Wang]
  * 
  * This program is free software: you can redistribute it and/or modify 
@@ -15,109 +15,109 @@
  * along with this program.  If not, see https://www.gnu.org/licenses/. 
  */
 
+ 
 /*
 * 文件名: AnabiosisAttributeSet.cpp
-* 功能描述： 实现玩家属性集 UAnabiosisAttributeSet 的逻辑。
-*            负责定义属性的默认值，并在属性变化前后进行 Clamp 或调整。
-* 结构：
-* - 构造函数：设置各属性的初始基础值和当前值。
-* - PreAttributeChange：在属性值被修改前调用，用于 Clamp 或基于最大值调整当前值。
-* - PostGameplayEffectExecute：在 GameplayEffect 执行后调用，用于 Clamp 生命值和法力值。
-* - AdjustAttributeForMaxChange：辅助函数，当最大值属性变化时，调整关联的当前值属性。
+* 功能描述： 实现玩家属性集的具体逻辑，包括默认值、属性调整和 Clamp。
 */
 
 #include "Attributes/AnabiosisAttributeSet.h"
-#include "GameplayEffectExtension.h" // 用于 FGameplayEffectModCallbackData
-#include "AbilitySystemComponent.h"
-#include "Characters/AnabiosisOriginCharacter.h" // 包含角色头文件以备将来使用
+#include "GameplayEffect.h"
+#include "GameplayEffectExtension.h"
+#include "AbilitySystemComponent.h" 
+#include "Characters/AnabiosisOriginCharacter.h" // Include character header
 
 UAnabiosisAttributeSet::UAnabiosisAttributeSet()
 {
-	// 初始化基础属性
+	// 初始化属性默认值
 	Strength.SetBaseValue(10.0f); Strength.SetCurrentValue(10.0f);
 	Agility.SetBaseValue(10.0f); Agility.SetCurrentValue(10.0f);
 	Constitution.SetBaseValue(10.0f); Constitution.SetCurrentValue(10.0f);
-	Intelligence.SetBaseValue(10.0f); Intelligence.SetCurrentValue(10.0f);
+	Intelligence.SetBaseValue(10.0f); Intelligence.SetCurrentValue(10.0f); 
 
-	// 初始化资源属性
 	Health.SetBaseValue(100.0f); Health.SetCurrentValue(100.0f);
 	MaxHealth.SetBaseValue(100.0f); MaxHealth.SetCurrentValue(100.0f);
-	Mana.SetBaseValue(100.0f); Mana.SetCurrentValue(100.0f);
-	MaxMana.SetBaseValue(100.0f); MaxMana.SetCurrentValue(100.0f);
+	Mana.SetBaseValue(100.0f); Mana.SetCurrentValue(100.0f);       
+	MaxMana.SetBaseValue(100.0f); MaxMana.SetCurrentValue(100.0f); 
 
-	// 初始化战斗属性
 	AttackPower.SetBaseValue(10.0f); AttackPower.SetCurrentValue(10.0f);
-	Defense.SetBaseValue(5.0f); Defense.SetCurrentValue(5.0f);
-	CriticalChance.SetBaseValue(0.05f); CriticalChance.SetCurrentValue(0.05f); // 暴击率 [0, 1]
-	CriticalMultiplier.SetBaseValue(1.5f); CriticalMultiplier.SetCurrentValue(1.5f); // 暴击倍率 >= 1
+	Defense.SetBaseValue(5.0f); Defense.SetCurrentValue(5.0f);             
+	CriticalChance.SetBaseValue(0.05f); CriticalChance.SetCurrentValue(0.05f); 
+	CriticalMultiplier.SetBaseValue(1.5f); CriticalMultiplier.SetCurrentValue(1.5f); 
 }
 
 void UAnabiosisAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
 {
 	Super::PreAttributeChange(Attribute, NewValue);
 
-	// 在属性值改变生效前进行调整或 Clamp
+	// 在属性值改变生效前进行调整 (例如，当 MaxHealth 改变时调整 Health)
 	if (Attribute == GetMaxHealthAttribute())
 	{
-		// 当最大生命值改变时，调整当前生命值
 		AdjustAttributeForMaxChange(Health, MaxHealth, NewValue, GetHealthAttribute());
 	}
-	else if (Attribute == GetMaxManaAttribute())
+	else if (Attribute == GetMaxManaAttribute()) 
 	{
-		// 当最大法力值改变时，调整当前法力值
 		AdjustAttributeForMaxChange(Mana, MaxMana, NewValue, GetManaAttribute());
 	}
+	// Clamp 暴击率在 [0, 1] 区间
 	else if (Attribute == GetCriticalChanceAttribute())
 	{
-		// Clamp 暴击率在 [0, 1] 区间
 		NewValue = FMath::Clamp(NewValue, 0.0f, 1.0f);
 	}
+	// Clamp 暴击倍率 >= 1
 	else if (Attribute == GetCriticalMultiplierAttribute())
 	{
-		// Clamp 暴击倍率 >= 1
 		NewValue = FMath::Max(NewValue, 1.0f);
 	}
-	// 可以添加对其他属性的 Clamp 或调整逻辑
 }
 
 void UAnabiosisAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data)
 {
 	Super::PostGameplayEffectExecute(Data);
 
-	// 在 GameplayEffect 执行后进行最终的 Clamp
+	// 在 GameplayEffect 执行后进行 Clamp
 	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
-		// Clamp Health 在 [0, MaxHealth] 之间
+		// Clamp Health
 		SetHealth(FMath::Clamp(GetHealth(), 0.0f, GetMaxHealth()));
-		// 死亡检查已移至 Character 的属性变化监听器中处理
+
+		// 检查是否死亡 (这种方式只对 GE 造成的伤害有效)
+		// 我们已经在 Character 类中通过监听属性变化来处理，这里可以移除或保留作为备用
+		/*
+		if (GetHealth() <= 0.0f)
+		{
+			AActor* TargetActor = nullptr;
+			AController* TargetController = nullptr;
+			if (Data.Target.AbilityActorInfo.IsValid() && Data.Target.AbilityActorInfo->AvatarActor.IsValid())
+			{
+				TargetActor = Data.Target.AbilityActorInfo->AvatarActor.Get();
+				TargetController = Data.Target.AbilityActorInfo->PlayerController.Get();
+			}
+
+			AAnabiosisOriginCharacter* TargetCharacter = Cast<AAnabiosisOriginCharacter>(TargetActor);
+			if (TargetCharacter && !TargetCharacter->IsDead())
+			{
+				TargetCharacter->HandleDeath();
+			}
+		}
+		*/
 	}
 	else if (Data.EvaluatedData.Attribute == GetManaAttribute())
 	{
-		// Clamp Mana 在 [0, MaxMana] 之间
 		SetMana(FMath::Clamp(GetMana(), 0.0f, GetMaxMana()));
 	}
-	// 可以添加对其他属性的 Clamp
 }
 
 void UAnabiosisAttributeSet::AdjustAttributeForMaxChange(FGameplayAttributeData& AffectedAttribute, const FGameplayAttributeData& MaxAttribute, float NewMaxValue, const FGameplayAttribute& AffectedAttributeProperty)
 {
 	UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent();
 	const float CurrentMaxValue = MaxAttribute.GetCurrentValue();
-
-	// 检查 ASC 是否有效，以及当前最大值是否非零（避免除零错误）
-	// 如果受影响属性的当前值大于新的最大值，则将其 Clamp 到新的最大值
+	// 如果当前值大于新的最大值，则将当前值调整为新的最大值
 	if (ASC && !FMath::IsNearlyZero(CurrentMaxValue) && AffectedAttribute.GetCurrentValue() > NewMaxValue)
 	{
-		// 同时设置基础值和当前值，以确保一致性
-		// 注意：这可能需要根据具体设计调整，例如只调整当前值
-		ASC->SetNumericAttributeBase(AffectedAttributeProperty, NewMaxValue);
-		AffectedAttribute.SetCurrentValue(NewMaxValue);
+		// 同时设置基础值和当前值，以防基础值也需要调整
+		// 注意：这可能不是所有情况都期望的行为，取决于你的设计
+		ASC->SetNumericAttributeBase(AffectedAttributeProperty, NewMaxValue); 
+		AffectedAttribute.SetCurrentValue(NewMaxValue); 
 	}
-	// 可选：如果希望在最大值增加时按比例增加当前值，可以在此处添加逻辑
-	// else if (ASC && !FMath::IsNearlyZero(CurrentMaxValue) && NewMaxValue > CurrentMaxValue)
-	// {
-	//     float Percentage = AffectedAttribute.GetCurrentValue() / CurrentMaxValue;
-	//     ASC->SetNumericAttributeBase(AffectedAttributeProperty, NewMaxValue * Percentage); // Adjust base value proportionally
-	//     AffectedAttribute.SetCurrentValue(NewMaxValue * Percentage); // Adjust current value proportionally
-	// }
 }

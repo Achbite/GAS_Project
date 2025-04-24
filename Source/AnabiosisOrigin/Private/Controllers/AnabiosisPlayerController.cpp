@@ -1,4 +1,4 @@
-/*
+/* 
  * Copyright (C) 2025 [Wang]
  * 
  * This program is free software: you can redistribute it and/or modify 
@@ -18,15 +18,13 @@
 /*
 * 文件名: AnabiosisPlayerController.cpp
 * 功能描述： 实现玩家控制器 AAnabiosisPlayerController 的逻辑。
-*            处理输入绑定、角色移动、视角控制、跳跃、攻击触发（通过切换模式间接触发）以及目标锁定。
+*            处理输入绑定、角色移动、视角控制、跳跃、攻击以及战斗模式切换。
 * 结构：
-* - 构造函数：初始化相机参数、锁定参数和默认状态。
+* - 构造函数：初始化相机参数和默认状态。
 * - BeginPlay：获取控制的角色并添加输入映射上下文。
 * - SetupInputComponent：绑定输入 Action 到处理函数。
-* - Move, Look, Jump, StopJumping, ToggleAttackLook：输入处理函数。
-* - PlayerTick：处理目标锁定时的视角平滑插值和状态检查。
-* - UpdateCharacterMovementState, SetCameraParameters：辅助函数，用于更新角色旋转和相机状态。
-* - TryLockTarget, UnlockTarget：处理目标锁定和解锁的逻辑。
+* - Move, Look, Jump, StopJumping, OnAttackActionStarted, ToggleAttackLook：输入处理函数。
+* - UpdateCharacterMovementState, SetCameraParameters：辅助函数，用于更新角色和相机状态。
 */
 
 #include "Controllers/AnabiosisPlayerController.h"
@@ -40,10 +38,10 @@
 #include "AbilitySystemComponent.h" // 包含能力系统组件
 #include "InputMappingContext.h" // 包含输入映射上下文
 #include "InputAction.h" // 包含输入 Action
-#include "Kismet/GameplayStatics.h" // 用于 GetAllActorsOfClass
-#include "Kismet/KismetMathLibrary.h" // 用于 FindLookAtRotation, 角度计算
-#include "Engine/World.h" // 用于 LineTrace
-// #include "DrawDebugHelpers.h" // 如果不再需要调试绘制，可以移除
+#include "Kismet/GameplayStatics.h" // For GetAllActorsOfClass
+#include "Kismet/KismetMathLibrary.h" // For LookAtRotation, Angle calculations
+#include "Engine/World.h" // For LineTrace
+#include "DrawDebugHelpers.h" // For debug drawing
 
 AAnabiosisPlayerController::AAnabiosisPlayerController()
 {
@@ -52,17 +50,18 @@ AAnabiosisPlayerController::AAnabiosisPlayerController()
 	CombatCameraArmLength = 300.0f;
 	CombatCameraOffset = FVector(0.f, 50.f, 20.f);
 
-	// 初始化视角转动速率 (注意：增强输入通常不直接使用速率，而是直接处理输入值)
+	// 初始化视角转动速率
 	BaseTurnRate = 45.f;
 	BaseLookUpRate = 45.f;
 
-	// 初始化战斗模式和锁定状态
+	// 初始化战斗模式状态
 	bIsInCombatMode = false;
+	// 初始化锁定状态
 	LockedTarget = nullptr;
 	bIsTargetLocked = false;
-	MaxLockDistance = 2000.0f; // 最大锁定距离
-	LockConeAngleDegrees = 30.0f; // 锁定锥形半角
-	LockInterpolationSpeed = 10.0f; // 视角插值速度
+	MaxLockDistance = 2000.0f;
+	LockConeAngleDegrees = 30.0f;
+	LockInterpolationSpeed = 10.0f;
 }
 
 void AAnabiosisPlayerController::BeginPlay()
@@ -99,72 +98,86 @@ void AAnabiosisPlayerController::SetupInputComponent()
 	if (UEnhancedInputComponent* EnhancedInputComponent = Cast<UEnhancedInputComponent>(InputComponent))
 	{
 		// --- 绑定输入 Action ---
+		// 绑定移动 Action
 		if (MoveAction)
 			EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AAnabiosisPlayerController::Move);
 		else UE_LOG(LogTemp, Error, TEXT("玩家控制器：未设置 MoveAction。"));
 
+		// 绑定视角 Action
 		if (LookAction)
 			EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AAnabiosisPlayerController::Look);
 		else UE_LOG(LogTemp, Error, TEXT("玩家控制器：未设置 LookAction。"));
 
+		// 绑定跳跃 Action
 		if (JumpAction)
 		{
-			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AAnabiosisPlayerController::Jump);
-			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &AAnabiosisPlayerController::StopJumping);
+			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &AAnabiosisPlayerController::Jump); // 跳跃开始
+			EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &AAnabiosisPlayerController::StopJumping); // 跳跃结束
 		} else UE_LOG(LogTemp, Error, TEXT("玩家控制器：未设置 JumpAction。"));
 
-		// 绑定切换战斗/锁定模式的 Action
+		// 绑定切换攻击/锁定视角 Action
 		if (AttackLookAction)
 			EnhancedInputComponent->BindAction(AttackLookAction, ETriggerEvent::Started, this, &AAnabiosisPlayerController::ToggleAttackLook);
 		else UE_LOG(LogTemp, Error, TEXT("玩家控制器：未设置 AttackLookAction。"));
-
-		// 注意：攻击输入通常通过 GAS 的 Input Binding 处理，而不是直接在 Controller 中绑定
 	}
 	else
 	{
+		// 如果转换失败，记录致命错误
 		UE_LOG(LogTemp, Fatal, TEXT("玩家控制器：无法将 InputComponent 转换为 UEnhancedInputComponent。增强输入可能未启用或设置不正确。"));
 	}
 }
 
 void AAnabiosisPlayerController::Move(const FInputActionValue& Value)
 {
+	// 检查角色是否有效
 	if (!ControlledCharacter) return;
 
+	// 获取二维移动向量
 	FVector2D MovementVector = Value.Get<FVector2D>();
+	// 如果移动向量为零，则不执行操作
 	if (MovementVector.IsZero()) return;
 
-	// 根据控制器旋转计算移动方向
+	// 获取控制器旋转，并只取 Yaw 方向
 	const FRotator Rotation = GetControlRotation();
 	const FRotator YawRotation(0, Rotation.Yaw, 0);
+
+	// 计算前方向和右方向
 	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-	// 添加移动输入
-	ControlledCharacter->AddMovementInput(ForwardDirection, MovementVector.Y);
-	ControlledCharacter->AddMovementInput(RightDirection, MovementVector.X);
+	// 向角色添加移动输入
+	ControlledCharacter->AddMovementInput(ForwardDirection, MovementVector.Y); // 前后移动
+	ControlledCharacter->AddMovementInput(RightDirection, MovementVector.X);   // 左右移动
 }
 
 void AAnabiosisPlayerController::Look(const FInputActionValue& Value)
 {
-	// 如果已锁定目标，则由 PlayerTick 处理主要旋转，忽略此处的输入
+	// 如果已锁定目标，则由 PlayerTick 处理旋转，忽略或修改此处的输入
 	if (bIsTargetLocked)
 	{
-		// 可以选择允许微小的输入来调整视角，但这会增加复杂性
-		return;
+		// 可选：允许轻微的输入来调整围绕目标的视角，但这会更复杂
+		// FVector2D LookAxisVector = Value.Get<FVector2D>();
+		// AddYawInput(LookAxisVector.X * 0.1f); // Example: Reduced input
+		// AddPitchInput(LookAxisVector.Y * 0.1f);
+		return; // 主要旋转由 Tick 处理
 	}
 
+	// 检查角色是否有效
 	if (!ControlledCharacter) return;
 
+	// 获取二维视角向量
 	FVector2D LookAxisVector = Value.Get<FVector2D>();
+	// 如果视角向量为零，则不执行操作
 	if (LookAxisVector.IsZero()) return;
 
-	// 添加 Yaw 和 Pitch 输入以控制视角
-	AddYawInput(LookAxisVector.X);
-	AddPitchInput(LookAxisVector.Y);
+	// 添加 Yaw 和 Pitch 输入
+	AddYawInput(LookAxisVector.X);   // 左右视角转动
+	AddPitchInput(LookAxisVector.Y); // 上下视角转动
 }
 
 void AAnabiosisPlayerController::Jump()
 {
+	// 如果角色有效，则调用其跳跃函数
 	if (ControlledCharacter)
 	{
 		ControlledCharacter->Jump();
@@ -173,6 +186,7 @@ void AAnabiosisPlayerController::Jump()
 
 void AAnabiosisPlayerController::StopJumping()
 {
+	// 如果角色有效，则调用其停止跳跃函数
 	if (ControlledCharacter)
 	{
 		ControlledCharacter->StopJumping();
@@ -181,19 +195,20 @@ void AAnabiosisPlayerController::StopJumping()
 
 void AAnabiosisPlayerController::ToggleAttackLook(const FInputActionValue& Value)
 {
+	// 检查角色是否有效
 	if (!ControlledCharacter) return;
 
 	// 切换战斗模式状态
 	bIsInCombatMode = !bIsInCombatMode;
 	UE_LOG(LogTemp, Log, TEXT("切换战斗模式：%s"), bIsInCombatMode ? TEXT("开启") : TEXT("关闭"));
 
-	// 更新角色旋转和相机设置
+	// 更新角色移动和相机状态
 	UpdateCharacterMovementState(bIsInCombatMode);
 
 	// 根据战斗模式处理锁定逻辑
 	if (bIsInCombatMode)
 	{
-		TryLockTarget(); // 进入战斗模式时尝试锁定目标
+		TryLockTarget(); // 进入战斗模式时尝试锁定
 	}
 	else
 	{
@@ -205,13 +220,12 @@ void AAnabiosisPlayerController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);
 
-	// 处理目标锁定状态下的视角更新
 	if (bIsTargetLocked && LockedTarget)
 	{
-		// 检查目标有效性 (死亡、不可见等)
+		// 检查目标有效性
 		if (LockedTarget->IsDead() || !LockedTarget->GetMesh() || !LockedTarget->GetMesh()->IsVisible())
 		{
-			UE_LOG(LogTemp, Log, TEXT("锁定目标 %s 失效，解除锁定。"), *LockedTarget->GetName());
+			UE_LOG(LogTemp, Log, TEXT("锁定目标 %s 失效 (死亡或不可见)，解除锁定。"), *LockedTarget->GetName());
 			UnlockTarget();
 			return;
 		}
@@ -225,27 +239,45 @@ void AAnabiosisPlayerController::PlayerTick(float DeltaTime)
 			return;
 		}
 
-		// 可选：检查视线，如果需要更严格的锁定条件
+		// 检查视线 (可选，如果性能允许可以频繁检查)
 		// FHitResult HitResult;
-		// bool bHit = GetWorld()->LineTraceSingleByChannel(...);
-		// if (bHit) { UnlockTarget(); return; }
+		// FVector Start = ControlledCharacter->GetActorLocation();
+		// FVector End = LockedTarget->GetActorLocation();
+		// FCollisionQueryParams QueryParams;
+		// QueryParams.AddIgnoredActor(ControlledCharacter); // 忽略玩家自身
+		// QueryParams.AddIgnoredActor(LockedTarget); // 忽略目标自身 (可选)
 
-		// 计算朝向目标的旋转
+		// bool bHit = GetWorld()->LineTraceSingleByChannel(
+		// 	HitResult,
+		// 	Start,
+		// 	End,
+		// 	ECC_Visibility, // 使用可见性通道
+		// 	QueryParams
+		// );
+
+		// if (bHit)
+		// {
+		// 	// UE_LOG(LogTemp, Log, TEXT("锁定目标 %s 视线被 %s 阻挡，解除锁定。"), *LockedTarget->GetName(), *HitResult.GetActor()->GetName());
+		// 	// UnlockTarget(); // 暂时不因短暂遮挡解除锁定，除非设计需要
+		// 	// return;
+		// }
+
+		// 计算目标旋转
 		FRotator TargetRotation = UKismetMathLibrary::FindLookAtRotation(
 			ControlledCharacter->GetActorLocation(),
-			LockedTarget->GetActorLocation() // 可以优化为瞄准目标的特定部位
+			LockedTarget->GetActorLocation() // 可以瞄准目标的特定骨骼或组件位置
 		);
 
-		// 平滑插值当前视角到目标视角
+		// 平滑插值到目标旋转
 		FRotator CurrentRotation = GetControlRotation();
 		FRotator NewRotation = FMath::RInterpTo(CurrentRotation, TargetRotation, DeltaTime, LockInterpolationSpeed);
 
-		// 应用新的 Yaw 和 Pitch，保持 Roll 不变
+		// 只应用 Yaw 和 Pitch，Roll 保持不变
 		SetControlRotation(FRotator(NewRotation.Pitch, NewRotation.Yaw, CurrentRotation.Roll));
 	}
 	else if (bIsTargetLocked && !LockedTarget)
 	{
-		// 状态不一致，解除锁定
+		// 如果标记为锁定但目标为空，则解除锁定
 		UnlockTarget();
 	}
 }
@@ -254,11 +286,13 @@ void AAnabiosisPlayerController::PlayerTick(float DeltaTime)
 
 void AAnabiosisPlayerController::SetCameraParameters(float ArmLength, const FVector& Offset)
 {
+	// 检查角色是否有效
 	if (!ControlledCharacter) return;
 
+	// 获取角色的相机弹簧臂组件
 	if (USpringArmComponent* CameraBoom = ControlledCharacter->GetCameraBoom())
 	{
-		// 设置相机臂长度和插槽偏移
+		// 设置弹簧臂长度和插槽偏移
 		CameraBoom->TargetArmLength = ArmLength;
 		CameraBoom->SocketOffset = Offset;
 	}
@@ -270,6 +304,7 @@ void AAnabiosisPlayerController::SetCameraParameters(float ArmLength, const FVec
 
 void AAnabiosisPlayerController::UpdateCharacterMovementState(bool bIsCombatMode)
 {
+	// 检查角色是否有效
 	if (!ControlledCharacter) return;
 
 	// 更新角色旋转设置
@@ -282,20 +317,20 @@ void AAnabiosisPlayerController::UpdateCharacterMovementState(bool bIsCombatMode
 	SetCameraParameters(NewArmLength, NewOffset);
 }
 
-// --- 目标锁定函数 ---
+// --- 新增锁定函数 ---
 
 void AAnabiosisPlayerController::TryLockTarget()
 {
 	if (!ControlledCharacter) return;
 
-	UnlockTarget(); // 尝试锁定时先清除旧目标
+	UnlockTarget(); // 先清除旧目标
 
 	float MinAngleRad = FMath::DegreesToRadians(LockConeAngleDegrees);
-	float BestScore = -1.0f; // 用于选择最佳目标
+	float BestScore = -1.0f; // 使用评分系统选择最佳目标
 	AEnemyBaseCharacter* PotentialTarget = nullptr;
 
 	FVector PlayerLocation = ControlledCharacter->GetActorLocation();
-	FVector PlayerForward = GetControlRotation().Vector(); // 使用控制器（相机）朝向
+	FVector PlayerForward = GetControlRotation().Vector(); // 使用控制器旋转作为前向
 
 	// 获取世界中的所有敌人
 	TArray<AActor*> FoundEnemies;
@@ -304,8 +339,7 @@ void AAnabiosisPlayerController::TryLockTarget()
 	for (AActor* Actor : FoundEnemies)
 	{
 		AEnemyBaseCharacter* Enemy = Cast<AEnemyBaseCharacter>(Actor);
-		// 检查敌人有效性、死亡状态和可见性
-		if (!Enemy || Enemy->IsDead() || !Enemy->GetMesh() || !Enemy->GetMesh()->IsVisible())
+		if (!Enemy || Enemy->IsDead() || !Enemy->GetMesh() || !Enemy->GetMesh()->IsVisible()) // 检查有效性、死亡状态和可见性
 		{
 			continue;
 		}
@@ -317,7 +351,7 @@ void AAnabiosisPlayerController::TryLockTarget()
 		// 1. 检查距离
 		if (DistanceSq > FMath::Square(MaxLockDistance))
 		{
-			continue; // 目标太远
+			continue; // 太远
 		}
 
 		DirectionToEnemy.Normalize();
@@ -326,20 +360,34 @@ void AAnabiosisPlayerController::TryLockTarget()
 		float AngleRad = FMath::Acos(FVector::DotProduct(PlayerForward, DirectionToEnemy));
 		if (AngleRad > MinAngleRad)
 		{
-			continue; // 目标在锁定锥形之外
+			continue; // 在锁定锥形外
 		}
 
-		// 3. 检查视线 (可选，如果需要严格的视线要求)
-		// FHitResult HitResult;
-		// bool bHit = GetWorld()->LineTraceSingleByChannel(...);
-		// if (bHit) { continue; } // 视线被阻挡
+		// 3. 检查视线
+		FHitResult HitResult;
+		FCollisionQueryParams QueryParams;
+		QueryParams.AddIgnoredActor(ControlledCharacter); // 忽略玩家
+		QueryParams.AddIgnoredActor(Enemy); // 忽略敌人自身
+
+		bool bHit = GetWorld()->LineTraceSingleByChannel(
+			HitResult,
+			PlayerLocation,
+			EnemyLocation,
+			ECC_Visibility, // 可见性通道
+			QueryParams
+		);
+
+		// if (bHit)
+		// {
+		// 	continue; // 视线被阻挡
+		// }
 
 		// 计算评分 (距离越近、角度越小，得分越高)
-		float AngleScore = 1.0f - (AngleRad / MinAngleRad); // 角度评分
-		float DistanceScore = 1.0f - (FMath::Sqrt(DistanceSq) / MaxLockDistance); // 距离评分
-		float CurrentScore = AngleScore * 0.6f + DistanceScore * 0.4f; // 综合评分，角度权重更高
+		// 简单的评分：角度越小越好 (1 - 角度/最大角度)，距离越近越好 (1 - 距离/最大距离)
+		float AngleScore = 1.0f - (AngleRad / MinAngleRad);
+		float DistanceScore = 1.0f - (FMath::Sqrt(DistanceSq) / MaxLockDistance);
+		float CurrentScore = AngleScore * 0.6f + DistanceScore * 0.4f; // 角度权重更高
 
-		// 选择评分最高的目标
 		if (CurrentScore > BestScore)
 		{
 			BestScore = CurrentScore;
@@ -347,7 +395,6 @@ void AAnabiosisPlayerController::TryLockTarget()
 		}
 	}
 
-	// 如果找到合适的目标，则锁定
 	if (PotentialTarget)
 	{
 		LockedTarget = PotentialTarget;
@@ -371,6 +418,6 @@ void AAnabiosisPlayerController::UnlockTarget()
 	}
 	LockedTarget = nullptr;
 	bIsTargetLocked = false;
-	// 如果锁定改变了角色或相机的状态，可以在这里恢复
+	// 可选：重置相机设置或旋转模式，如果锁定改变了它们
 }
 

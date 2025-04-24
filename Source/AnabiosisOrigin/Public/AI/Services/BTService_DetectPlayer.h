@@ -5,16 +5,7 @@
 
 /*
 * 文件名: BTService_DetectPlayer.h
-* 功能描述： 定义行为树服务 UBTService_DetectPlayer。
-*            该服务周期性地检测玩家，检查距离和视线，并更新黑板中的目标 Actor 和 AI 状态。
-* 结构：
-* - UBTService_DetectPlayer：行为树服务类。
-*   - TickNode：服务周期的核心逻辑，执行检测和状态更新。
-*   - TargetActorKey：黑板键，用于存储检测到的目标 Actor。
-*   - AIStateKey：黑板键，用于存储当前的 AI 状态 (FName 类型)。
-*   - HasLineOfSight：辅助函数，执行视线检查。
-*   - 缓存成员：缓存指向行为组件、角色、控制器和黑板的指针以提高效率。
-*   - CacheComponents：辅助函数，用于获取并缓存必要的组件。
+* 功能描述： 行为树服务，用于周期性检测玩家，更新目标和 AI 状态。
 */
 
 #pragma once
@@ -23,11 +14,8 @@
 #include "BehaviorTree/Services/BTService_BlackboardBase.h"
 #include "BTService_DetectPlayer.generated.h"
 
-// 前向声明
 class AEnemyBaseCharacter;
 class UAiBehaviorComponent;
-class AAIController; // 添加 AIController 前向声明
-class UBlackboardComponent; // 添加 BlackboardComponent 前向声明
 
 /**
  * 该服务负责检测范围内的玩家，进行视线检查，并根据结果更新 Blackboard 中的 TargetActor 和 AIState。
@@ -41,7 +29,7 @@ public:
 	UBTService_DetectPlayer();
 
 protected:
-	/** 服务周期性执行的函数，包含主要的检测逻辑 */
+	/** 更新节点内存时调用 */
 	virtual void TickNode(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds) override;
 
 	/** Blackboard Key 选择器，用于设置/获取目标 Actor */
@@ -56,22 +44,22 @@ private:
 	/** 辅助函数：执行视线检查 */
 	bool HasLineOfSight(AAIController* OwnerController, const AActor* TargetActor) const;
 
-	/** 缓存的 AiBehaviorComponent 指针 */
-	UPROPERTY(Transient)
+	/** 缓存的 AiBehaviorComponent */
+	UPROPERTY(Transient) // 不需要保存
 	TObjectPtr<UAiBehaviorComponent> CachedAiBehaviorComp;
 
-	/** 缓存的 EnemyBaseCharacter 指针 */
+	/** 缓存的 EnemyBaseCharacter */
 	UPROPERTY(Transient)
 	TObjectPtr<AEnemyBaseCharacter> CachedOwnerCharacter;
 
-	/** 缓存的 AIController 指针 */
+	/** 缓存的 AIController */
 	UPROPERTY(Transient)
 	TObjectPtr<AAIController> CachedOwnerController;
 
-	/** 缓存的 BlackboardComponent 指针 */
+	/** 缓存的 BlackboardComponent */
 	UPROPERTY(Transient)
 	TObjectPtr<UBlackboardComponent> CachedBlackboardComp;
 
-	/** 辅助函数：获取并缓存必要的组件，避免每次 Tick 都查找 */
+	/** 辅助函数：获取并缓存必要的组件 */
 	bool CacheComponents(UBehaviorTreeComponent& OwnerComp);
 };

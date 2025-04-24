@@ -1,4 +1,4 @@
-/*
+/* 
  * Copyright (C) 2025 [Wang]
  * 
  * This program is free software: you can redistribute it and/or modify 
@@ -17,45 +17,38 @@
 
 /*
 * 文件名: EnemyAttributeSet.cpp
-* 功能描述： 实现敌人属性集 UEnemyAttributeSet 的逻辑。
-*            负责定义属性的默认值，并在属性变化前后进行 Clamp 或调整。
-* 结构：
-* - 构造函数：设置各属性的初始基础值和当前值。
-* - PreAttributeChange：在属性值被修改前调用，用于基于最大值调整当前值。
-* - PostGameplayEffectExecute：在 GameplayEffect 执行后调用，用于 Clamp 生命值。
-* - AdjustAttributeForMaxChange：辅助函数，当最大值属性变化时，调整关联的当前值属性。
+* 功能描述： 实现敌人属性集的具体逻辑，包括默认值、属性调整和 Clamp。
 */
 
 #include "Attributes/EnemyAttributeSet.h"
-#include "GameplayEffectExtension.h" // 用于 FGameplayEffectModCallbackData
-// #include "Data/EnemyAttributeData.h" // 如果 InitializeFromDataTable 不再使用，可以移除
+#include "GameplayEffect.h"
+#include "GameplayEffectExtension.h"
+#include "Data/EnemyAttributeData.h"
 #include "AbilitySystemComponent.h"
-#include "Characters/EnemyBaseCharacter.h" // 包含角色头文件以备将来使用
-// #include "GameplayTagsManager.h" // 如果不在此处使用 Tag，可以移除
+#include "Characters/EnemyBaseCharacter.h"
+#include "GameplayTagsManager.h"
 
 UEnemyAttributeSet::UEnemyAttributeSet()
 {
-	// 初始化资源和战斗属性
+	// 初始化属性默认值
 	Health.SetBaseValue(100.0f); Health.SetCurrentValue(100.0f);
 	MaxHealth.SetBaseValue(100.0f); MaxHealth.SetCurrentValue(100.0f);
 	AttackPower.SetBaseValue(10.0f); AttackPower.SetCurrentValue(10.0f);
 	Defense.SetBaseValue(5.0f); Defense.SetCurrentValue(5.0f);
-
-	// 初始化 AI 相关属性 (这些值通常由数据表覆盖)
 	DetectionRange.SetBaseValue(1000.0f); DetectionRange.SetCurrentValue(1000.0f);
-	AggroValue.SetBaseValue(0.0f); AggroValue.SetCurrentValue(0.0f); // 仇恨值
+	AggroValue.SetBaseValue(0.0f); AggroValue.SetCurrentValue(0.0f);
 }
 
 void UEnemyAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
 {
 	Super::PreAttributeChange(Attribute, NewValue);
 
-	// 当最大生命值改变时，调整当前生命值
+	// 当 MaxHealth 改变时调整 Health
 	if (Attribute == GetMaxHealthAttribute())
 	{
 		AdjustAttributeForMaxChange(Health, MaxHealth, NewValue, GetHealthAttribute());
 	}
-	// 可以添加对其他属性的 Clamp 或调整逻辑，例如仇恨值不能为负
+	// Clamp 仇恨值
 	// else if (Attribute == GetAggroValueAttribute())
 	// {
 	//     NewValue = FMath::Max(NewValue, 0.0f);
@@ -66,28 +59,31 @@ void UEnemyAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallb
 {
 	Super::PostGameplayEffectExecute(Data);
 
-	// 获取效果上下文和相关信息 (如果需要根据来源或标签做不同处理)
-	// FGameplayEffectContextHandle Context = Data.EffectSpec.GetContext();
-	// UAbilitySystemComponent* SourceASC = Context.GetOriginalInstigatorAbilitySystemComponent();
-	// const FGameplayTagContainer& SourceTags = *Data.EffectSpec.CapturedSourceTags.GetAggregatedTags();
-	// AActor* TargetActor = nullptr;
-	// AController* TargetController = nullptr;
-	// AEnemyBaseCharacter* TargetCharacter = nullptr;
-	// if (Data.Target.AbilityActorInfo.IsValid() && Data.Target.AbilityActorInfo->AvatarActor.IsValid())
-	// {
-	// 	TargetActor = Data.Target.AbilityActorInfo->AvatarActor.Get();
-	// 	TargetController = Data.Target.AbilityActorInfo->PlayerController.Get(); // 对 AI 来说是 AIController
-	// 	TargetCharacter = Cast<AEnemyBaseCharacter>(TargetActor);
-	// }
+	FGameplayEffectContextHandle Context = Data.EffectSpec.GetContext();
+	UAbilitySystemComponent* SourceASC = Context.GetOriginalInstigatorAbilitySystemComponent();
+	const FGameplayTagContainer& SourceTags = *Data.EffectSpec.CapturedSourceTags.GetAggregatedTags();
+	AActor* TargetActor = nullptr;
+	AController* TargetController = nullptr;
+	AEnemyBaseCharacter* TargetCharacter = nullptr;
+	if (Data.Target.AbilityActorInfo.IsValid() && Data.Target.AbilityActorInfo->AvatarActor.IsValid())
+	{
+		TargetActor = Data.Target.AbilityActorInfo->AvatarActor.Get();
+		TargetController = Data.Target.AbilityActorInfo->PlayerController.Get(); // Might be AIController
+		TargetCharacter = Cast<AEnemyBaseCharacter>(TargetActor);
+	}
 
-	// 在 GameplayEffect 执行后进行最终的 Clamp
+	// Clamp Health
 	if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
-		// Clamp Health 在 [0, MaxHealth] 之间
 		SetHealth(FMath::Clamp(GetHealth(), 0.0f, GetMaxHealth()));
-		// 死亡检查已移至 Character 的 TakeDamage 或属性变化监听器中处理
+
+		// 死亡检查通常在 TakeDamage 或 GE 应用后进行
+		// if (TargetCharacter && GetHealth() <= 0.0f && !TargetCharacter->IsDead())
+		// {
+		//     TargetCharacter->HandleDeath();
+		// }
 	}
-	// 可以添加对其他属性的 Clamp
+	// ... (Clamp other attributes if needed) ...
 }
 
 void UEnemyAttributeSet::AdjustAttributeForMaxChange(FGameplayAttributeData& AffectedAttribute,
@@ -95,15 +91,18 @@ void UEnemyAttributeSet::AdjustAttributeForMaxChange(FGameplayAttributeData& Aff
 {
 	UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent();
 	const float CurrentMaxValue = MaxAttribute.GetCurrentValue();
-
-	// 检查 ASC 是否有效，以及当前最大值是否非零
-	// 如果受影响属性的当前值大于新的最大值，则将其 Clamp 到新的最大值
 	if (ASC && !FMath::IsNearlyZero(CurrentMaxValue) && AffectedAttribute.GetCurrentValue() > NewMaxValue)
 	{
-		// 同时设置基础值和当前值
 		ASC->SetNumericAttributeBase(AffectedAttributeProperty, NewMaxValue);
 		AffectedAttribute.SetCurrentValue(NewMaxValue);
 	}
-	// 可选：按比例调整当前值
 }
+
+// InitializeFromDataTable 函数已不再直接被 EnemyBaseCharacter 调用，
+// 属性初始化现在通过 SetNumericAttributeBase 完成。
+// 如果将来需要单独初始化 AttributeSet，可以保留此函数。
+// void UEnemyAttributeSet::InitializeFromDataTable(const UDataTable* DataTable, const FName& RowName)
+// {
+//     // ... (Implementation removed for brevity, as it's currently unused) ...
+// }
 
