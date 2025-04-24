@@ -14,391 +14,271 @@
  * You should have received a copy of the GNU General Public License 
  * along with this program.  If not, see https://www.gnu.org/licenses/. 
  */
-
  
 /*
 * 文件名: EnemyBaseCharacter.cpp
-* 功能描述：
-* - 实现AI敌人基础功能
-* - 初始化属性和能力系统
-* - 处理AI行为逻辑
+* 功能描述： 实现 AI 敌人基础角色 AEnemyBaseCharacter 的逻辑。
+*            负责初始化能力系统 (ASC)、属性集 (AttributeSet)、AI 行为组件 (AiBehaviorComponent)，
+*            从数据表加载属性、能力和动画蒙太奇，处理伤害和死亡逻辑，以及武器的生成和附加。
+* 结构：
+* - 构造函数：设置默认组件值、碰撞配置。
+* - PostInitializeComponents：在组件初始化后，如果是服务器，则从数据表加载属性。
+* - BeginPlay：基类实现。
+* - InitializeAttributesFromDataTable：从数据表加载并应用属性、蒙太奇、能力，初始化 AI 行为。
+* - GetAbilitySystemComponent, GetAttributeSet, GetHitReactionMontage：访问器函数。
+* - IsStunned, IsDead：状态检查函数。
+* - HandleHitReaction_Implementation：受击反应的 C++ 实现（可被蓝图覆盖）。
+* - PossessedBy：初始化 ASC ActorInfo，应用默认效果。
+* - TakeDamage：处理接收到的伤害，更新生命值属性，检查死亡。
+* - HandleDeath：处理死亡逻辑，停止移动、禁用碰撞、播放死亡动画、销毁武器、取消能力。
+* - OnDeathMontageEnded：死亡动画结束后的回调，销毁 Actor。
+* - ApplyDefaultEffects：应用配置的默认 GameplayEffect。
+* - SpawnAndAttachWeapon：根据数据表生成并附加武器 Actor。
 */
 
 #include "Characters/EnemyBaseCharacter.h"
 #include "AbilitySystemComponent.h"
-#include "Attributes/EnemyAttributeSet.h" // 确保包含属性集头文件
-#include "Data/EnemyAttributeData.h"    // 包含敌人属性数据结构头文件
+#include "Attributes/EnemyAttributeSet.h"
+#include "Data/EnemyAttributeData.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/CapsuleComponent.h"
-#include "Engine/CollisionProfile.h"
-#include "Animation/AnimMontage.h" // Include AnimMontage
-#include "GameFramework/Controller.h" // Include Controller for TakeDamage override
-#include "Engine/DamageEvents.h"    // Include DamageEvents for TakeDamage override
-#include "Components/SkeletalMeshComponent.h" // 包含骨骼网格体组件头文件
-#include "Animation/AnimInstance.h" // Include for AnimInstance
-#include "AI/AiBehaviorComponent.h" // 包含 AI 行为组件以便查找
-#include "AI/EnemyAIController.h"   // 包含 AI 控制器以便通知 (如果需要)
-#include "GameplayTagsManager.h" // Include for Gameplay Tags
-#include "Abilities/GameplayAbility.h" // Include for GameplayAbility
-#include "Items/WeaponBase.h" // Include Weapon Actor
-#include "Data/WeaponAttributeData.h" // Include Weapon Data Struct
-#include "Engine/DataTable.h" // Include DataTable
-#include "AbilitySystemComponent.h" // Needed for applying GE
-#include "GameFramework/CharacterMovementComponent.h" // Needed for GetMesh()
-#include "UObject/UObjectGlobals.h" // Needed for LoadSynchronous
+#include "Animation/AnimMontage.h"
+#include "GameFramework/Controller.h"
+#include "Engine/DamageEvents.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Animation/AnimInstance.h"
+#include "AI/AiBehaviorComponent.h"
+#include "GameplayTagsManager.h" // 用于 RequestGameplayTag
+#include "Abilities/GameplayAbility.h"
+#include "Items/WeaponBase.h"
+#include "Data/WeaponAttributeData.h"
+#include "Engine/DataTable.h"
+#include "UObject/UObjectGlobals.h" // 用于 FindObject
 
-#define COLLISION_ENEMY ECC_GameTraceChannel1
+#define COLLISION_ENEMY ECC_GameTraceChannel1 // 定义敌人碰撞通道
 
 AEnemyBaseCharacter::AEnemyBaseCharacter()
 {
-    // 禁用玩家控制器的旋转
-    bUseControllerRotationPitch = false;
-    bUseControllerRotationYaw = false;
-    bUseControllerRotationRoll = false;
+	// 配置角色旋转和移动
+	bUseControllerRotationPitch = false;
+	bUseControllerRotationYaw = false; // AI 通常不直接使用控制器旋转 Yaw
+	bUseControllerRotationRoll = false;
 
-    // 配置移动组件
-    UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
-    if (MovementComponent)
-    {
-        MovementComponent->bOrientRotationToMovement = true;
-        MovementComponent->RotationRate = FRotator(0.0f, 500.0f, 0.0f);
-    }
+	UCharacterMovementComponent* MovementComponent = GetCharacterMovement();
+	if (MovementComponent)
+	{
+		MovementComponent->bOrientRotationToMovement = true; // 使角色朝向移动方向
+		MovementComponent->RotationRate = FRotator(0.0f, 500.0f, 0.0f); // 设置旋转速率
+	}
 
-    // 初始化能力系统组件 (移除复制设置)
-    AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
+	// 创建 GAS 和 AI 相关组件
+	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
+	AttributeSet = CreateDefaultSubobject<UEnemyAttributeSet>(TEXT("AttributeSet"));
+	AiBehaviorComponent = CreateDefaultSubobject<UAiBehaviorComponent>(TEXT("AiBehaviorComponent"));
 
-    // 创建属性集
-    AttributeSet = CreateDefaultSubobject<UEnemyAttributeSet>(TEXT("AttributeSet"));
+	// 配置胶囊体碰撞
+	UCapsuleComponent* Capsule = GetCapsuleComponent();
+	if (Capsule)
+	{
+		Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		Capsule->SetCollisionObjectType(ECC_Pawn);
+		Capsule->SetCollisionResponseToAllChannels(ECR_Block);
+		Capsule->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore); // 忽略可见性检测
+		Capsule->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);    // 忽略相机碰撞
+		Capsule->SetCollisionResponseToChannel(COLLISION_ENEMY, ECR_Block); // 与其他敌人碰撞
+	}
 
-    // --- 创建 AI 行为组件 ---
-    AiBehaviorComponent = CreateDefaultSubobject<UAiBehaviorComponent>(TEXT("AiBehaviorComponent"));
-    // -----------------------
+	// 配置骨骼网格碰撞 (通常 AI 的主要碰撞由胶囊体处理)
+	USkeletalMeshComponent* MeshComp = GetMesh();
+	if (MeshComp)
+	{
+		MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision); // 通常不启用网格碰撞
+		// MeshComp->SetCollisionObjectType(ECC_WorldStatic);
+		// MeshComp->SetCollisionResponseToAllChannels(ECR_Ignore);
+	}
 
-    // 设置胶囊体碰撞
-    UCapsuleComponent* Capsule = GetCapsuleComponent();
-    if (Capsule)
-    {
-        Capsule->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
-        Capsule->SetCollisionObjectType(ECC_Pawn);
-        Capsule->SetCollisionResponseToAllChannels(ECR_Block);
-        Capsule->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
-        Capsule->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
-        Capsule->SetCollisionResponseToChannel(COLLISION_ENEMY, ECR_Block);
-    }
-
-    // 禁用骨骼网格体的碰撞
-    USkeletalMeshComponent* MeshComp = GetMesh();
-    if (MeshComp)
-    {
-        MeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision); // 完全禁用碰撞
-        MeshComp->SetCollisionObjectType(ECC_WorldStatic); // 可以设为不影响物理的类型
-        MeshComp->SetCollisionResponseToAllChannels(ECR_Ignore); // 忽略所有通道
-    }
-
-    // 设置数据表和行名默认值 (可选)
-    AttributeDataTable = nullptr;
-    AttributeDataRowName = NAME_None;
-    WeaponAttributeDataTable = nullptr; // Initialize weapon data table pointer
-    CurrentWeapon = nullptr; // Initialize weapon pointer
-
-    LoadedHitReactionMontage = nullptr; // Initialize the pointer
-    LoadedDeathMontage = nullptr; // Initialize death montage pointer
-    bIsDead = false; // Initialize dead state
-    bAttributesInitialized = false; // Initialize initialization flag
+	// 初始化数据表和状态变量
+	AttributeDataTable = nullptr;
+	AttributeDataRowName = NAME_None;
+	WeaponAttributeDataTable = nullptr;
+	CurrentWeapon = nullptr;
+	LoadedHitReactionMontage = nullptr;
+	LoadedDeathMontage = nullptr;
+	bIsDead = false;
+	bAttributesInitialized = false;
 }
 
 void AEnemyBaseCharacter::PostInitializeComponents()
 {
-    Super::PostInitializeComponents();
+	Super::PostInitializeComponents();
 
-    // 确保在服务器上执行属性初始化，并且只执行一次
-    if (GetLocalRole() == ROLE_Authority && !bAttributesInitialized)
-    {
-        InitializeAttributesFromDataTable();
-        // 注意：AiBehaviorComponent 的初始化现在在 InitializeAttributesFromDataTable 内部完成
-        // 武器生成也移到 InitializeAttributesFromDataTable 之后
-    }
-}
-
-void AEnemyBaseCharacter::InitializeAttributesFromDataTable()
-{
-    // --- 添加初始化检查 ---
-    if (bAttributesInitialized)
-    {
-        return;
-    }
-    // -----------------------
-
-    if (!AttributeDataTable)
-    {
-        UE_LOG(LogTemp, Error, TEXT("EnemyBaseCharacter %s: AttributeDataTable is not set!"), *GetName());
-        return;
-    }
-    if (AttributeDataRowName == NAME_None)
-    {
-        UE_LOG(LogTemp, Error, TEXT("EnemyBaseCharacter %s: AttributeDataRowName is not set!"), *GetName());
-        return;
-    }
-    if (!AttributeSet)
-    {
-         UE_LOG(LogTemp, Error, TEXT("EnemyBaseCharacter %s: AttributeSet is NULL! Cannot initialize attributes."), *GetName());
-        return;       
-    }
-     if (!AbilitySystemComponent)
-    {
-         UE_LOG(LogTemp, Error, TEXT("EnemyBaseCharacter %s: AbilitySystemComponent is NULL! Cannot initialize attributes."), *GetName());
-        return;       
-    }
-
-    const FString ContextString(TEXT("Loading Enemy Attributes"));
-    FEnemyAttributeData* Row = AttributeDataTable->FindRow<FEnemyAttributeData>(AttributeDataRowName, ContextString);
-
-    if (!Row)
-    {
-        UE_LOG(LogTemp, Error, TEXT("EnemyBaseCharacter %s: Cannot find row '%s' in AttributeDataTable '%s'!"), *GetName(), *AttributeDataRowName.ToString(), *AttributeDataTable->GetName());
-        return;
-    }
-
-    // --- 应用加载的属性到 AttributeSet ---
-    // 使用 AbilitySystemComponent 初始化基础属性值
-    AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetHealthAttribute(), Row->InitialHealth);
-    AttributeSet->SetHealth(Row->InitialHealth); // 同时设置当前值
-    AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetMaxHealthAttribute(), Row->InitialMaxHealth);
-    AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetAttackPowerAttribute(), Row->AttackPower);
-    AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetDefenseAttribute(), Row->Defense);
-    // ... 初始化其他属性 ...
-
-    // --- 加载并存储受击蒙太奇 ---
-    LoadedHitReactionMontage = Row->HitReactionMontage;
-    if (!LoadedHitReactionMontage)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Enemy %s: HitReactionMontage is not set in DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
-    }
-
-    // --- 加载并存储死亡蒙太奇 ---
-    LoadedDeathMontage = Row->DeathMontage;
-    if (!LoadedDeathMontage)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("Enemy %s: DeathMontage is not set in DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
-    }
-
-    // --- 授予从数据表定义的能力 ---
-    if (HasAuthority() && AbilitySystemComponent) // 确保在服务器上且 ASC 有效
-    {
-        for (const TSubclassOf<UGameplayAbility>& AbilityClass : Row->GrantedAbilities)
-        {
-            if (AbilityClass)
-            {
-                FGameplayAbilitySpec AbilitySpec(AbilityClass, 1, INDEX_NONE, this); // Level 1, no input ID
-                AbilitySystemComponent->GiveAbility(AbilitySpec);
-                UE_LOG(LogTemp, Log, TEXT("Enemy %s granted ability: %s"), *GetName(), *AbilityClass->GetName());
-            }
-            else
-            {
-                UE_LOG(LogTemp, Warning, TEXT("Enemy %s found a NULL ability class in GrantedAbilities array for row '%s'."), *GetName(), *AttributeDataRowName.ToString());
-            }
-        }
-    }
-    // -----------------------------
-
-    // --- 初始化 AI 行为组件 ---
-    if (AiBehaviorComponent)
-    {
-        // 确保在属性加载后调用 InitializeBehavior
-        AiBehaviorComponent->InitializeBehavior(this, *Row); // 传递自身指针和加载的数据行
-        UE_LOG(LogTemp, Log, TEXT("Enemy %s initialized AiBehaviorComponent."), *GetName());
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("EnemyBaseCharacter %s: AiBehaviorComponent is NULL! Cannot initialize AI behavior."), *GetName());
-    }
-    // --------------------------
-
-    // --- 设置初始化标志位 ---
-    bAttributesInitialized = true;
-    // -----------------------
-
-    UE_LOG(LogTemp, Log, TEXT("Enemy %s finished initializing attributes, montages, abilities, and AI behavior from DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
-
-    // --- 生成并附加武器 (在属性初始化之后) ---
-    if (GetLocalRole() == ROLE_Authority) // 确保只在服务器生成
-    {
-        SpawnAndAttachWeapon(Row->WeaponDataRowName, Row->WeaponAttachSocketName);
-    }
-    // --------------------------------------
-
-    // 应用其他从数据表读取的配置，例如 AI 参数 (如果需要)
-    // GetCharacterMovement()->MaxWalkSpeed = ... Row->MovementSpeed ... (如果数据表中有)
+	// 仅在服务器上且未初始化时，从数据表加载属性
+	if (GetLocalRole() == ROLE_Authority && !bAttributesInitialized)
+	{
+		InitializeAttributesFromDataTable();
+	}
 }
 
 void AEnemyBaseCharacter::BeginPlay()
 {
-    Super::BeginPlay();
-    // BeginPlay 也可以是初始化属性的地方，取决于依赖关系
-    // if (GetLocalRole() == ROLE_Authority && !bAttributesInitialized) // 添加标志位避免重复初始化
-    // {
-    //     InitializeAttributesFromDataTable();
-    //     bAttributesInitialized = true;
-    // }
+	Super::BeginPlay();
+	// BeginPlay 中可以添加与游戏世界交互后的初始化逻辑
+}
+
+void AEnemyBaseCharacter::InitializeAttributesFromDataTable()
+{
+	if (bAttributesInitialized) return; // 防止重复初始化
+	// 检查必要的组件和数据表是否有效
+	if (!AttributeDataTable || AttributeDataRowName == NAME_None || !AttributeSet || !AbilitySystemComponent)
+	{
+		UE_LOG(LogTemp, Error, TEXT("EnemyBaseCharacter %s: 初始化检查失败 (数据表、行名、属性集或 ASC 缺失)。"), *GetName());
+		return;
+	}
+
+	// 从数据表查找行数据
+	const FString ContextString(TEXT("加载敌人属性"));
+	FEnemyAttributeData* Row = AttributeDataTable->FindRow<FEnemyAttributeData>(AttributeDataRowName, ContextString);
+	if (!Row)
+	{
+		UE_LOG(LogTemp, Error, TEXT("EnemyBaseCharacter %s: 在属性数据表 '%s' 中找不到行 '%s'！"), *GetName(), *AttributeDataTable->GetName(), *AttributeDataRowName.ToString());
+		return;
+	}
+
+	// 应用属性 (设置基础值，当前值由 AttributeSet 构造函数或后续 GE 处理)
+	AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetHealthAttribute(), Row->InitialHealth);
+	AttributeSet->SetHealth(Row->InitialHealth); // 同时设置当前值以确保初始状态正确
+	AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetMaxHealthAttribute(), Row->InitialMaxHealth);
+	AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetAttackPowerAttribute(), Row->AttackPower);
+	AbilitySystemComponent->SetNumericAttributeBase(AttributeSet->GetDefenseAttribute(), Row->Defense);
+	// 注意：DetectionRange 等 AI 相关属性由 AiBehaviorComponent 处理
+
+	// 加载动画蒙太奇
+	LoadedHitReactionMontage = Row->HitReactionMontage;
+	if (!LoadedHitReactionMontage)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("敌人 %s: 在数据表行 '%s' 中未设置 HitReactionMontage。"), *GetName(), *AttributeDataRowName.ToString());
+	}
+	LoadedDeathMontage = Row->DeathMontage;
+	if (!LoadedDeathMontage)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("敌人 %s: 在数据表行 '%s' 中未设置 DeathMontage。"), *GetName(), *AttributeDataRowName.ToString());
+	}
+
+	// 授予能力 (仅服务器)
+	if (HasAuthority())
+	{
+		for (const TSubclassOf<UGameplayAbility>& AbilityClass : Row->GrantedAbilities)
+		{
+			if (AbilityClass)
+			{
+				// 创建能力规格并授予
+				FGameplayAbilitySpec AbilitySpec(AbilityClass, 1, INDEX_NONE, this);
+				AbilitySystemComponent->GiveAbility(AbilitySpec);
+			}
+		}
+	}
+
+	// 初始化 AI 行为组件
+	if (AiBehaviorComponent)
+	{
+		AiBehaviorComponent->InitializeBehavior(this, *Row);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("EnemyBaseCharacter %s: AiBehaviorComponent 为空！无法初始化 AI 行为。"), *GetName());
+	}
+
+	bAttributesInitialized = true; // 标记为已初始化
+
+	// 生成并附加武器 (仅服务器)
+	if (GetLocalRole() == ROLE_Authority)
+	{
+		SpawnAndAttachWeapon(Row->WeaponDataRowName, Row->WeaponAttachSocketName);
+	}
 }
 
 UAbilitySystemComponent* AEnemyBaseCharacter::GetAbilitySystemComponent() const
 {
-    return AbilitySystemComponent;
+	return AbilitySystemComponent;
 }
 
-// --- 实现 GetAttributeSet ---
 UEnemyAttributeSet* AEnemyBaseCharacter::GetAttributeSet() const
 {
 	return AttributeSet;
 }
-// --------------------------
 
 UAnimMontage* AEnemyBaseCharacter::GetHitReactionMontage() const
 {
-    return LoadedHitReactionMontage;
+	// 返回从数据表加载的受击蒙太奇
+	return LoadedHitReactionMontage;
 }
 
 bool AEnemyBaseCharacter::IsStunned() const
 {
-	// 检查 AbilitySystemComponent 是否有效以及是否拥有 StunnedTag
+	// 检查是否拥有眩晕标签
 	return AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(StunnedTag);
 }
 
-// --- 实现受击处理函数 (BlueprintNativeEvent 的 C++ 部分) ---
 void AEnemyBaseCharacter::HandleHitReaction_Implementation(AActor* DamageCauser)
 {
-	if (IsDead() || IsStunned()) // 如果已死亡或已处于受击状态，则不处理
-	{
-		return;
-	}
-
-	// 播放受击蒙太奇
-	UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
-	if (AnimInstance && LoadedHitReactionMontage)
-	{
-		// 停止当前可能在播放的其他蒙太奇 (可选，取决于设计)
-		// AnimInstance->Montage_Stop(0.1f);
-
-		const float PlayRate = 1.0f;
-		AnimInstance->Montage_Play(LoadedHitReactionMontage, PlayRate);
-		UE_LOG(LogTemp, Verbose, TEXT("%s playing HitReactionMontage: %s"), *GetName(), *LoadedHitReactionMontage->GetName());
-
-		// 可选：根据伤害来源调整朝向
-		if (DamageCauser)
-		{
-			FVector DirectionToCauser = (DamageCauser->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
-			FRotator LookAtRotation = DirectionToCauser.Rotation();
-			// 可以平滑转向或立即设置
-			SetActorRotation(LookAtRotation);
-		}
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("%s cannot play HitReactionMontage. AnimInstance: %p, Montage: %p"),
-			*GetName(), AnimInstance, LoadedHitReactionMontage.Get());
-	}
-
-	// 应用受击效果 (例如，施加 StunnedTag) - 这通常由伤害 GE 完成，但也可以在这里补充
-	if (HitReactionEffect && AbilitySystemComponent)
-	{
-		FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
-		EffectContext.AddSourceObject(DamageCauser ? DamageCauser : this); // 设置伤害来源
-		FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(HitReactionEffect, 1, EffectContext);
-		if (SpecHandle.IsValid())
-		{
-			AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-			UE_LOG(LogTemp, Verbose, TEXT("%s applied HitReactionEffect."), *GetName());
-		}
-	}
+	// 默认的受击反应 C++ 实现。
+	// 可以在蓝图中覆盖此函数以添加更复杂的逻辑，例如根据伤害来源播放不同的动画。
+	// UE_LOG(LogTemp, Log, TEXT("%s HandleHitReaction_Implementation called."), *GetName());
 }
-// ---------------------------------------------------------
 
 void AEnemyBaseCharacter::PossessedBy(AController* NewController)
 {
-    Super::PossessedBy(NewController);
-    
-    if (AbilitySystemComponent)
-    {
-        AbilitySystemComponent->InitAbilityActorInfo(this, this);
+	Super::PossessedBy(NewController);
 
-        // --- 初始化 StunnedTag ---
-        // 确保 StunnedTag 有效，如果未在编辑器中设置，则使用默认值
-        if (!StunnedTag.IsValid())
-        {
-            StunnedTag = FGameplayTag::RequestGameplayTag(FName("AI.State.Stunned"));
-            UE_LOG(LogTemp, Warning, TEXT("%s: StunnedTag was invalid, using default 'AI.State.Stunned'."), *GetName());
-        }
-        // -------------------------
+	// 当被控制器控制时 (服务器和客户端都会调用)
+	if (AbilitySystemComponent)
+	{
+		// 初始化 ASC 的 ActorInfo，将此 Character 设置为 Avatar 和 Owner
+		AbilitySystemComponent->InitAbilityActorInfo(this, this);
 
-        // 注意：默认能力现在从数据表授予，这里不再调用 GiveDefaultAbilities
-        // GiveDefaultAbilities();
-        ApplyDefaultEffects(); // 默认效果仍然可以应用
-    }
+		// 确保 StunnedTag 有效
+		if (!StunnedTag.IsValid())
+		{
+			StunnedTag = FGameplayTag::RequestGameplayTag(FName("AI.State.Stunned"));
+			UE_LOG(LogTemp, Warning, TEXT("%s: StunnedTag 无效，使用默认 'AI.State.Stunned'。"), *GetName());
+		}
+		// 应用默认效果 (例如，被动效果)
+		ApplyDefaultEffects();
+	}
 }
 
 bool AEnemyBaseCharacter::IsDead() const
 {
-    return bIsDead;
+	return bIsDead;
 }
 
 float AEnemyBaseCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
-	// --- 添加伤害免疫检查 (未来实现) ---
-	// if (AbilitySystemComponent && AbilitySystemComponent->HasMatchingGameplayTag(FGameplayTag::RequestGameplayTag(FName("Player.State.DamageImmune"))))
-	// {
-	//     UE_LOG(LogTemp, Verbose, TEXT("%s is immune to damage."), *GetName());
-	//     return 0.f;
-	// }
-	// ------------------------------------
+	// 如果已死亡，不受伤害
+	if (IsDead()) return 0.f;
 
-	if (IsDead()) // 如果已死亡，不再接受伤害
-	{
-		return 0.f;
-	}
-
+	// 调用父类的 TakeDamage 处理基础逻辑
 	const float ActualDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
 
+	// 如果实际造成了伤害，并且属性集和 ASC 有效
 	if (ActualDamage > 0.f && AttributeSet && AbilitySystemComponent)
 	{
-		// --- 注意：伤害计算和属性修改最好通过 GameplayEffect 处理 ---
-		// 这里的直接修改仅作为示例，推荐使用 GE 来应用伤害和触发后续效果
+		// 更新生命值属性
 		const float OldHealth = AttributeSet->GetHealth();
-		float NewHealth = OldHealth - ActualDamage; // 简化计算，未考虑防御等
+		float NewHealth = OldHealth - ActualDamage;
+		// Clamp 生命值在 [0, MaxHealth] 之间
 		NewHealth = FMath::Clamp(NewHealth, 0.0f, AttributeSet->GetMaxHealth());
-		AttributeSet->SetHealth(NewHealth); // 直接设置属性
-
-		UE_LOG(LogTemp, Log, TEXT("%s Took %.1f damage. Health changed from %.1f to %.1f"), *GetName(), ActualDamage, OldHealth, NewHealth);
-
-		// --- 触发受击事件标签 ---
-		FGameplayEventData Payload;
-		Payload.Instigator = EventInstigator ? EventInstigator : GetController();
-		Payload.Target = this;
-		Payload.EventMagnitude = ActualDamage;
-		Payload.OptionalObject = DamageCauser;
-		// 如果需要传递伤害类型，可以考虑使用 OptionalObject2 或 ContextHandle
-		// Payload.OptionalObject2 = DamageEvent.DamageTypeClass; // 示例
-
-		AbilitySystemComponent->HandleGameplayEvent(FGameplayTag::RequestGameplayTag(FName("Event.Damage.HitReact")), &Payload);
-		UE_LOG(LogTemp, Verbose, TEXT("%s sent GameplayEvent 'Event.Damage.HitReact'"), *GetName());
-		// ------------------------
+		AttributeSet->SetHealth(NewHealth); // 直接设置属性值
 
 		// 检查是否死亡
 		if (NewHealth <= 0.0f)
 		{
-			HandleDeath();
+			HandleDeath(); // 处理死亡逻辑
 		}
-		// --- 移除这里的 HandleHitReaction 调用，改为由 GE 或 GameplayEvent 触发 ---
-		// else
-		// {
-		//     HandleHitReaction(DamageCauser); // 处理受击反应
-		// }
-		// --------------------------------------------------------------------
 	}
 	else if (ActualDamage > 0.f)
 	{
-		// 保留重要警告
-		UE_LOG(LogTemp, Warning, TEXT("EnemyBaseCharacter %s Took %.1f damage, but AttributeSet or ASC is missing!"), *GetName(), ActualDamage);
+		UE_LOG(LogTemp, Warning, TEXT("EnemyBaseCharacter %s 受到 %.1f 伤害，但 AttributeSet 或 ASC 缺失！"), *GetName(), ActualDamage);
 	}
 
 	return ActualDamage;
@@ -406,27 +286,20 @@ float AEnemyBaseCharacter::TakeDamage(float DamageAmount, FDamageEvent const& Da
 
 void AEnemyBaseCharacter::HandleDeath()
 {
-	if (bIsDead) // 防止重复执行
-	{
-		return;
-	}
+	if (bIsDead) return; // 防止重复处理
 	bIsDead = true;
-	UE_LOG(LogTemp, Log, TEXT("EnemyBaseCharacter %s is handling death."), *GetName());
 
-	// --- 广播死亡委托 ---
+	// 广播死亡委托
 	OnDeathDelegate.Broadcast();
-	// --------------------
 
-	// --- 销毁武器 Actor ---
+	// 销毁当前武器
 	if (CurrentWeapon)
 	{
 		CurrentWeapon->Destroy();
-		CurrentWeapon = nullptr; // 清除指针
-		UE_LOG(LogTemp, Log, TEXT("  Destroyed CurrentWeapon for %s."), *GetName());
+		CurrentWeapon = nullptr;
 	}
-	// --------------------
 
-	// 停止移动
+	// 停止移动并禁用移动组件
 	if (GetCharacterMovement())
 	{
 		GetCharacterMovement()->StopMovementImmediately();
@@ -434,178 +307,155 @@ void AEnemyBaseCharacter::HandleDeath()
 		GetCharacterMovement()->SetComponentTickEnabled(false);
 	}
 
-	// 禁用碰撞 (保留查询以便可能的交互，例如拾取)
+	// 禁用碰撞
 	if (UCapsuleComponent* CapsuleComp = GetCapsuleComponent())
 	{
-		CapsuleComp->SetCollisionEnabled(ECollisionEnabled::NoCollision); // 完全禁用碰撞
+		CapsuleComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		CapsuleComp->SetCollisionResponseToAllChannels(ECR_Ignore);
 	}
 	if (GetMesh())
 	{
-		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision); // 确保骨骼网格体也无碰撞
+		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 
-
-	// 播放死亡蒙太奇
+	// 播放死亡动画
 	UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
 	if (AnimInstance && LoadedDeathMontage)
 	{
 		const float PlayRate = 1.0f;
 		AnimInstance->Montage_Play(LoadedDeathMontage, PlayRate);
-		// 绑定蒙太奇结束事件
+		// 绑定动画结束委托，在动画播放完毕后销毁 Actor
 		FOnMontageEnded MontageEndedDelegate;
 		MontageEndedDelegate.BindUObject(this, &AEnemyBaseCharacter::OnDeathMontageEnded);
 		AnimInstance->Montage_SetEndDelegate(MontageEndedDelegate, LoadedDeathMontage);
-		// 可以保留播放蒙太奇的日志，或改为 Verbose
-		UE_LOG(LogTemp, Log, TEXT("  Playing Death Montage: %s"), *LoadedDeathMontage->GetName());
 	}
 	else
 	{
-		// 保留重要警告
-		UE_LOG(LogTemp, Warning, TEXT("  Cannot play death montage: AnimInstance (%p) or LoadedDeathMontage (%p) is invalid."), AnimInstance, LoadedDeathMontage.Get());
-		SetLifeSpan(3.0f); 
+		// 如果没有动画或动画实例，则延迟销毁
+		UE_LOG(LogTemp, Warning, TEXT("无法播放死亡蒙太奇: AnimInstance (%p) 或 LoadedDeathMontage (%p) 无效。将在 3 秒后销毁。"), AnimInstance, LoadedDeathMontage.Get());
+		SetLifeSpan(3.0f);
 	}
 
-	// 可选：取消所有激活的能力
+	// 取消所有正在进行的能力
 	if (AbilitySystemComponent)
 	{
 		AbilitySystemComponent->CancelAllAbilities();
 	}
-
-	// 可选：通知 AI 控制器角色已死亡
-	// AAIController* AIController = Cast<AAIController>(GetController());
-	// if (AIController) { // ... 通知逻辑 ... }
 }
 
 void AEnemyBaseCharacter::OnDeathMontageEnded(UAnimMontage* Montage, bool bInterrupted)
 {
-	// 保留蒙太奇结束和销毁日志
-	UE_LOG(LogTemp, Log, TEXT("EnemyBaseCharacter %s death montage ended (Interrupted: %s). Destroying Actor."), *GetName(), bInterrupted ? TEXT("Yes") : TEXT("No"));
-	// Actor 的 Destroy 会自动处理其拥有的、未被手动销毁的组件
-	Destroy(); 
+	// 死亡动画播放完毕后销毁 Actor
+	Destroy();
 }
 
 void AEnemyBaseCharacter::ApplyDefaultEffects()
 {
-    if (!HasAuthority() || !AbilitySystemComponent) return;
+	// 仅在服务器上且 ASC 有效时应用
+	if (!HasAuthority() || !AbilitySystemComponent) return;
 
-    FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
-    EffectContext.AddSourceObject(this);
+	// 创建效果上下文
+	FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
+	EffectContext.AddSourceObject(this);
 
-    for (const TSubclassOf<UGameplayEffect>& GameplayEffect : DefaultEffects)
-    {
-        if (GameplayEffect)
-        {
-            FGameplayEffectSpecHandle NewHandle = AbilitySystemComponent->MakeOutgoingSpec(GameplayEffect, 1, EffectContext);
-            if (NewHandle.IsValid())
-            {
-                AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*NewHandle.Data.Get());
-            }
-        }
-    }
+	// 遍历默认效果列表
+	for (const TSubclassOf<UGameplayEffect>& GameplayEffect : DefaultEffects)
+	{
+		if (GameplayEffect)
+		{
+			// 创建效果规格并应用到自身
+			FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(GameplayEffect, 1, EffectContext);
+			if (SpecHandle.IsValid())
+			{
+				AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+			}
+		}
+	}
 }
 
 void AEnemyBaseCharacter::SpawnAndAttachWeapon(const FName& InWeaponDataRowName, const FName& InAttachSocketName)
 {
-    if (CurrentWeapon) // 如果已有武器，先销毁
-    {
-        CurrentWeapon->Destroy();
-        CurrentWeapon = nullptr;
-    }
-
-    if (!WeaponAttributeDataTable)
-    {
-        UE_LOG(LogTemp, Error, TEXT("%s: WeaponAttributeDataTable is not set! Cannot spawn weapon."), *GetName());
-        return;
-    }
-    if (InWeaponDataRowName == NAME_None)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("%s: WeaponDataRowName is None. No weapon will be spawned."), *GetName());
-        return;
-    }
-    if (InAttachSocketName == NAME_None)
+	// 如果已有武器，先销毁
+	if (CurrentWeapon)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("%s: WeaponAttachSocketName is None. Cannot attach weapon correctly."), *GetName());
-        // Optionally default to a socket or don't attach
-        // return;
+		CurrentWeapon->Destroy();
+		CurrentWeapon = nullptr;
 	}
 
+	// 检查武器数据表和行名是否有效
+	if (!WeaponAttributeDataTable || InWeaponDataRowName == NAME_None)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: WeaponAttributeDataTable 未设置或 WeaponDataRowName 为空。无法生成武器。"), *GetName());
+		return;
+	}
+	// 检查附加插槽名是否有效
+	if (InAttachSocketName == NAME_None)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: WeaponAttachSocketName 为空。无法正确附加武器。"), *GetName());
+	}
 
-    const FString ContextString(TEXT("Loading Weapon Attributes"));
-    FWeaponAttributeData* WeaponRow = WeaponAttributeDataTable->FindRow<FWeaponAttributeData>(InWeaponDataRowName, ContextString);
+	// 从武器数据表查找行数据
+	const FString ContextString(TEXT("加载武器属性"));
+	FWeaponAttributeData* WeaponRow = WeaponAttributeDataTable->FindRow<FWeaponAttributeData>(InWeaponDataRowName, ContextString);
+	if (!WeaponRow)
+	{
+		UE_LOG(LogTemp, Error, TEXT("%s: 在 WeaponAttributeDataTable '%s' 中找不到行 '%s'！"), *GetName(), *WeaponAttributeDataTable->GetName(), *InWeaponDataRowName.ToString());
+		return;
+	}
 
-    if (!WeaponRow)
-    {
-        UE_LOG(LogTemp, Error, TEXT("%s: Cannot find row '%s' in WeaponAttributeDataTable '%s'!"), *GetName(), *InWeaponDataRowName.ToString(), *WeaponAttributeDataTable->GetName());
-        return;
-    }
+	// 检查武器 Actor 类指针是否有效
+	if (WeaponRow->WeaponActorClassPtr.IsNull())
+	{
+		UE_LOG(LogTemp, Error, TEXT("%s: 在 WeaponAttributeData 行 '%s' 中未设置 WeaponActorClassPtr！"), *GetName(), *InWeaponDataRowName.ToString());
+		return;
+	}
 
-    // --- 使用 TSoftClassPtr 加载类 ---
-    if (WeaponRow->WeaponActorClassPtr.IsNull())
-    {
-        UE_LOG(LogTemp, Error, TEXT("%s: WeaponActorClassPtr is not set or is null in WeaponAttributeData row '%s'!"), *GetName(), *InWeaponDataRowName.ToString());
-        return;
-    }
+	// 同步加载武器 Actor 类
+	TSubclassOf<AWeaponBase> LoadedWeaponClass = WeaponRow->WeaponActorClassPtr.LoadSynchronous();
+	if (!LoadedWeaponClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("%s: 从路径 %s 加载 WeaponActorClassPtr 失败 (行 '%s')！"), *GetName(), *WeaponRow->WeaponActorClassPtr.ToString(), *InWeaponDataRowName.ToString());
+		return;
+	}
 
-    // 同步加载类资源
-    TSubclassOf<AWeaponBase> LoadedWeaponClass = WeaponRow->WeaponActorClassPtr.LoadSynchronous();
+	UWorld* World = GetWorld();
+	if (!World) return;
 
-    if (!LoadedWeaponClass)
-    {
-        UE_LOG(LogTemp, Error, TEXT("%s: Failed to load WeaponActorClassPtr from path %s in row '%s'!"), *GetName(), *WeaponRow->WeaponActorClassPtr.ToString(), *InWeaponDataRowName.ToString());
-        return;
-    }
-    // ---------------------------------
+	// 设置生成参数
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this; // 设置拥有者
+	SpawnParams.Instigator = GetInstigator(); // 设置煽动者
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn; // 始终生成，忽略碰撞
 
-    UWorld* World = GetWorld();
-    if (!World) return;
+	// 生成武器 Actor
+	CurrentWeapon = World->SpawnActor<AWeaponBase>(LoadedWeaponClass, GetActorLocation(), GetActorRotation(), SpawnParams);
 
-    // 设置生成参数
-    FActorSpawnParameters SpawnParams;
-    SpawnParams.Owner = this;
-    SpawnParams.Instigator = GetInstigator();
-    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn; // 总是生成，稍后附加
+	if (CurrentWeapon)
+	{
+		// 如果骨骼网格和插槽名有效，则附加武器到插槽
+		if (GetMesh() && InAttachSocketName != NAME_None)
+		{
+			CurrentWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, InAttachSocketName);
+		}
+		else {
+			 UE_LOG(LogTemp, Warning, TEXT("无法附加 %s。骨骼网格无效或 SocketName 为空。"), *CurrentWeapon->GetName());
+		}
 
-    // --- 使用加载后的类生成武器 Actor ---
-    CurrentWeapon = World->SpawnActor<AWeaponBase>(LoadedWeaponClass, GetActorLocation(), GetActorRotation(), SpawnParams);
-    // -----------------------------------
-
-    if (CurrentWeapon)
-    {
-        UE_LOG(LogTemp, Log, TEXT("%s spawned weapon: %s (from class %s)"), *GetName(), *CurrentWeapon->GetName(), *LoadedWeaponClass->GetName());
-
-        // 附加到骨骼插槽
-        if (GetMesh() && InAttachSocketName != NAME_None)
-        {
-            CurrentWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, InAttachSocketName);
-            UE_LOG(LogTemp, Log, TEXT("  Attached %s to socket %s"), *CurrentWeapon->GetName(), *InAttachSocketName.ToString());
-        }
-        else {
-             UE_LOG(LogTemp, Warning, TEXT("  Could not attach %s. Mesh invalid or SocketName is None."), *CurrentWeapon->GetName());
-        }
-
-
-        // 应用属性效果 (如果定义了)
-        if (WeaponRow->GrantedAttributesEffect && AbilitySystemComponent)
-        {
-            FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
-            EffectContext.AddSourceObject(CurrentWeapon); // 将武器设为效果来源
-
-            FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(WeaponRow->GrantedAttributesEffect, 1, EffectContext); // Level 1
-            if (SpecHandle.IsValid())
-            {
-                AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-                UE_LOG(LogTemp, Log, TEXT("  Applied GrantedAttributesEffect: %s"), *WeaponRow->GrantedAttributesEffect->GetName());
-            }
-            else
-            {
-                UE_LOG(LogTemp, Warning, TEXT("  Failed to create spec for GrantedAttributesEffect: %s"), *WeaponRow->GrantedAttributesEffect->GetName());
-            }
-        }
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("%s failed to spawn weapon actor from loaded class %s!"), *GetName(), *LoadedWeaponClass->GetName());
-    }
+		// 如果武器数据中定义了授予属性的效果，则应用该效果
+		if (WeaponRow->GrantedAttributesEffect && AbilitySystemComponent)
+		{
+			FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
+			EffectContext.AddSourceObject(CurrentWeapon); // 将武器设为效果源
+			FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(WeaponRow->GrantedAttributesEffect, 1, EffectContext);
+			if (SpecHandle.IsValid())
+			{
+				AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+			}
+		}
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("%s 生成武器 Actor 失败 (类 %s)！"), *GetName(), *LoadedWeaponClass->GetName());
+	}
 }
 

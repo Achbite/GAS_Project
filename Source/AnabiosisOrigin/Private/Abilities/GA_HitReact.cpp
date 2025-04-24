@@ -6,7 +6,7 @@
 /*
 * 文件名: GA_HitReact.cpp
 * 功能描述： 实现受击反应 Gameplay Ability (UGA_HitReact) 的逻辑。
-*            获取角色的受击蒙太奇并播放。
+*            获取角色的受击蒙太奇并播放，同时控制角色移动。
 */
 
 #include "Abilities/GA_HitReact.h"
@@ -16,6 +16,7 @@
 #include "Characters/AnabiosisOriginCharacter.h" // Include player character
 #include "Characters/EnemyBaseCharacter.h"     // Include enemy character
 #include "AbilitySystemComponent.h"
+#include "GameFramework/CharacterMovementComponent.h" // Include for movement component
 
 UGA_HitReact::UGA_HitReact()
 {
@@ -30,16 +31,8 @@ UGA_HitReact::UGA_HitReact()
 
 void UGA_HitReact::ActivateAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, const FGameplayEventData* TriggerEventData)
 {
-	// --- Add Log ---
-	ACharacter* LogOwnerCharacter = ActorInfo ? Cast<ACharacter>(ActorInfo->AvatarActor.Get()) : nullptr;
-	UE_LOG(LogTemp, Log, TEXT("GA_HitReact: ActivateAbility called for %s."), LogOwnerCharacter ? *LogOwnerCharacter->GetName() : TEXT("Unknown Actor"));
-	// ---------------
-
 	if (!CommitAbility(Handle, ActorInfo, ActivationInfo))
 	{
-		// --- Add Log ---
-		UE_LOG(LogTemp, Warning, TEXT("GA_HitReact: Failed to commit ability for %s."), LogOwnerCharacter ? *LogOwnerCharacter->GetName() : TEXT("Unknown Actor"));
-		// ---------------
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
 	}
@@ -52,22 +45,27 @@ void UGA_HitReact::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 		return;
 	}
 
-	// --- Add Log ---
-	UE_LOG(LogTemp, Log, TEXT("GA_HitReact: Getting HitReactionMontage for %s."), *OwnerCharacter->GetName());
-	// ---------------
+	// --- 禁用移动 ---
+	CachedMovementComponent = OwnerCharacter->GetCharacterMovement();
+	if (CachedMovementComponent)
+	{
+		CachedMovementComponent->DisableMovement();
+		// UE_LOG(LogTemp, Log, TEXT("GA_HitReact: Disabled movement for %s."), *OwnerCharacter->GetName()); // Optional Log
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("GA_HitReact: Could not get CharacterMovementComponent for %s."), *OwnerCharacter->GetName());
+	}
+	// ----------------
+
 	UAnimMontage* MontageToPlay = GetHitReactionMontage(OwnerCharacter);
 
 	if (!MontageToPlay)
 	{
-		// --- Log already exists ---
 		UE_LOG(LogTemp, Warning, TEXT("GA_HitReact: No HitReactionMontage found for %s. Ending ability."), *OwnerCharacter->GetName());
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, false); // End normally if no montage
 		return;
 	}
-
-	// --- Add Log ---
-	UE_LOG(LogTemp, Log, TEXT("GA_HitReact: Found Montage %s. Creating MontageTask for %s."), *MontageToPlay->GetName(), *OwnerCharacter->GetName());
-	// ---------------
 
 	MontageTask = UAbilityTask_PlayMontageAndWait::CreatePlayMontageAndWaitProxy(
 		this,
@@ -80,7 +78,6 @@ void UGA_HitReact::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 
 	if (!MontageTask)
 	{
-		// --- Log already exists ---
 		UE_LOG(LogTemp, Error, TEXT("GA_HitReact: Failed to create MontageTask for %s."), *OwnerCharacter->GetName());
 		EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
 		return;
@@ -93,8 +90,7 @@ void UGA_HitReact::ActivateAbility(const FGameplayAbilitySpecHandle Handle, cons
 	MontageTask->OnBlendOut.AddDynamic(this, &UGA_HitReact::OnMontageBlendOut);
 
 	MontageTask->ReadyForActivation();
-	// --- Log already exists ---
-	UE_LOG(LogTemp, Verbose, TEXT("GA_HitReact: Activated and playing montage %s for %s."), *MontageToPlay->GetName(), *OwnerCharacter->GetName());
+	// UE_LOG(LogTemp, Verbose, TEXT("GA_HitReact: Activated and playing montage %s for %s."), *MontageToPlay->GetName(), *OwnerCharacter->GetName()); // Optional Log
 }
 
 void UGA_HitReact::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGameplayAbilityActorInfo* ActorInfo, const FGameplayAbilityActivationInfo ActivationInfo, bool bReplicateEndAbility, bool bWasCancelled)
@@ -106,7 +102,16 @@ void UGA_HitReact::EndAbility(const FGameplayAbilitySpecHandle Handle, const FGa
 	}
 	MontageTask = nullptr;
 
-	UE_LOG(LogTemp, Verbose, TEXT("GA_HitReact: Ended. Cancelled: %s"), bWasCancelled ? TEXT("Yes") : TEXT("No"));
+	// --- 恢复移动 ---
+	if (CachedMovementComponent && CachedMovementComponent->MovementMode == MOVE_None) // Check if still disabled
+	{
+		CachedMovementComponent->SetMovementMode(MOVE_Walking); // Or MOVE_NavWalking, or a default mode variable
+		// UE_LOG(LogTemp, Log, TEXT("GA_HitReact: Restored movement for %s."), ActorInfo->AvatarActor.IsValid() ? *ActorInfo->AvatarActor->GetName() : TEXT("Unknown Actor")); // Optional Log
+	}
+	CachedMovementComponent = nullptr; // Clear cached pointer
+	// ----------------
+
+	// UE_LOG(LogTemp, Verbose, TEXT("GA_HitReact: Ended. Cancelled: %s"), bWasCancelled ? TEXT("Yes") : TEXT("No")); // Optional Log
 	Super::EndAbility(Handle, ActorInfo, ActivationInfo, bReplicateEndAbility, bWasCancelled);
 	// ActivationOwnedTags (State.HitReact) will be removed automatically by the base class
 }
@@ -144,10 +149,7 @@ UAnimMontage* UGA_HitReact::GetHitReactionMontage(ACharacter* OwnerCharacter) co
 	if (AAnabiosisOriginCharacter* PlayerChar = Cast<AAnabiosisOriginCharacter>(OwnerCharacter))
 	{
 		FoundMontage = PlayerChar->GetHitReactionMontage();
-		// --- Add Log ---
-		UE_LOG(LogTemp, Log, TEXT("GA_HitReact: GetHitReactionMontage - Checked Player %s. Montage: %s"),
-			*PlayerChar->GetName(), FoundMontage ? *FoundMontage->GetName() : TEXT("NULL"));
-		// ---------------
+		// UE_LOG(LogTemp, Log, TEXT("GA_HitReact: GetHitReactionMontage - Checked Player %s. Montage: %s"), *PlayerChar->GetName(), FoundMontage ? *FoundMontage->GetName() : TEXT("NULL")); // Optional Log
 		return FoundMontage;
 	}
 
@@ -155,16 +157,12 @@ UAnimMontage* UGA_HitReact::GetHitReactionMontage(ACharacter* OwnerCharacter) co
 	if (AEnemyBaseCharacter* EnemyChar = Cast<AEnemyBaseCharacter>(OwnerCharacter))
 	{
 		FoundMontage = EnemyChar->GetHitReactionMontage();
-		// --- Add Log ---
-		UE_LOG(LogTemp, Log, TEXT("GA_HitReact: GetHitReactionMontage - Checked Enemy %s. Montage: %s"),
-			*EnemyChar->GetName(), FoundMontage ? *FoundMontage->GetName() : TEXT("NULL"));
-		// ---------------
+		// UE_LOG(LogTemp, Log, TEXT("GA_HitReact: GetHitReactionMontage - Checked Enemy %s. Montage: %s"), *EnemyChar->GetName(), FoundMontage ? *FoundMontage->GetName() : TEXT("NULL")); // Optional Log
 		return FoundMontage;
 	}
 
 	// Add checks for other character types if necessary
 
-	// --- Log already exists ---
 	UE_LOG(LogTemp, Warning, TEXT("GA_HitReact: GetHitReactionMontage - Owner %s is not a recognized character type (Player or Enemy)."), *OwnerCharacter->GetName());
 	return nullptr;
 }

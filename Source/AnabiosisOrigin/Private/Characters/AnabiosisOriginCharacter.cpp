@@ -1,4 +1,4 @@
-/* 
+/*
  * Copyright (C) 2025 [Wang]
  * 
  * This program is free software: you can redistribute it and/or modify 
@@ -18,491 +18,430 @@
 
 /*
 * 文件名: AnabiosisOriginCharacter.cpp
-* 功能描述： 实现玩家角色基础功能，包括组件初始化、GAS 设置和属性加载。
+* 功能描述： 实现玩家角色 AAnabiosisOriginCharacter 的逻辑。
+*            负责初始化相机、移动、能力系统 (ASC)、属性集 (AttributeSet)，
+*            从数据表加载属性、能力和动画蒙太奇，处理伤害、死亡逻辑，武器生成与附加，
+*            以及角色旋转模式和攻击标签的管理。
+* 结构：
+* - 构造函数：设置默认组件值（胶囊体、移动、相机臂、相机）、创建 ASC 和属性集。
+* - BeginPlay：绑定属性变化监听器。
+* - GetAbilitySystemComponent, GetCameraBoom, GetFollowCamera, GetHitReactionMontage：访问器。
+* - PossessedBy：初始化 ASC ActorInfo，授予默认能力，绑定监听器。
+* - GiveDefaultAbilities：授予配置的默认 GameplayAbility。
+* - SetPlayerClass, UpdateAttributesForClass：处理玩家职业切换及属性更新（当前实现为重新加载）。
+* - SetCharacterRotationMode：设置角色是否朝向移动方向或使用控制器旋转。
+* - SetAttackAbilityTag：设置当前的攻击能力标签（用于连击）。
+* - RefreshAbilityBindings：刷新能力绑定（当前实现可能需要审查）。
+* - IsDead：状态检查函数。
+* - PostInitializeComponents：服务器上初始化属性。
+* - InitializeAttributesFromDataTable：从数据表加载并应用属性、蒙太奇，生成武器。
+* - SpawnAndAttachWeapon：根据数据表生成并附加武器 Actor，应用武器效果，设置初始攻击标签。
+* - BindAttributeChangeListeners：绑定属性变化委托。
+* - OnHealthAttributeChanged：生命值变化回调，检查死亡。
+* - HandleDeath：处理死亡逻辑，销毁武器、停止移动、禁用碰撞、播放死亡动画、取消能力、禁用输入。
+* - OnDeathMontageEnded：死亡动画结束回调，销毁 Actor。
 */
 
 #include "Characters/AnabiosisOriginCharacter.h"
 #include "Camera/CameraComponent.h"
 #include "Components/CapsuleComponent.h"
-#include "Components/InputComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/Controller.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "AbilitySystemComponent.h"
-#include "AbilitySystemGlobals.h" 
-#include "Attributes/AnabiosisAttributeSet.h" 
-#include "Data/AnabiosisAttributeData.h" 
-#include "Animation/AnimInstance.h" // Include for AnimInstance
-#include "Engine/DataTable.h" // Needed if loading data here
-#include "Components/SkeletalMeshComponent.h" // 确保包含骨骼网格体
-#include "Items/WeaponBase.h" // Include Weapon Actor
-#include "Data/WeaponAttributeData.h" // Include Weapon Data Struct
-#include "AbilitySystemComponent.h" // Needed for applying GE
-#include "UObject/UObjectGlobals.h" // Needed for LoadSynchronous
-#include "GameplayTagContainer.h" // Ensure GameplayTagContainer is included
+#include "Attributes/AnabiosisAttributeSet.h"
+#include "Data/AnabiosisAttributeData.h"
+#include "Animation/AnimInstance.h"
+#include "Engine/DataTable.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Items/WeaponBase.h"
+#include "Data/WeaponAttributeData.h"
+#include "UObject/UObjectGlobals.h" // 用于 FindObject
+#include "GameplayTagContainer.h" // 用于 FGameplayTag
+#include "Abilities/GameplayAbility.h" // 用于 TSubclassOf<UGameplayAbility>
 
 AAnabiosisOriginCharacter::AAnabiosisOriginCharacter()
 {
-    // 碰撞胶囊体设置
-    GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
-    
-    bUseControllerRotationPitch = false;
-    bUseControllerRotationYaw = false;
-    bUseControllerRotationRoll = false;
+	// 配置胶囊体
+	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
 
-    // 移动系统配置
-    GetCharacterMovement()->bOrientRotationToMovement = true;
-    GetCharacterMovement()->RotationRate = FRotator(0.0f, 500.0f, 0.0f);
-    GetCharacterMovement()->JumpZVelocity = 700.f;
-    GetCharacterMovement()->AirControl = 0.35f;
-    GetCharacterMovement()->MaxWalkSpeed = 500.f;
-    GetCharacterMovement()->MinAnalogWalkSpeed = 20.f;
-    GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
-    GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
+	// 配置角色旋转（通常由控制器或战斗模式控制）
+	bUseControllerRotationPitch = false;
+	bUseControllerRotationYaw = false;
+	bUseControllerRotationRoll = false;
 
-    // 相机系统初始化
-    CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
-    CameraBoom->SetupAttachment(RootComponent);
-    CameraBoom->TargetArmLength = 400.0f;
-    CameraBoom->bUsePawnControlRotation = true;
+	// 配置角色移动
+	GetCharacterMovement()->bOrientRotationToMovement = true; // 默认朝向移动方向
+	GetCharacterMovement()->RotationRate = FRotator(0.0f, 500.0f, 0.0f);
+	GetCharacterMovement()->JumpZVelocity = 700.f;
+	GetCharacterMovement()->AirControl = 0.35f;
+	GetCharacterMovement()->MaxWalkSpeed = 500.f;
+	GetCharacterMovement()->MinAnalogWalkSpeed = 20.f;
+	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
+	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
 
-    FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
-    FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
-    FollowCamera->bUsePawnControlRotation = false;
+	// 配置相机臂
+	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
+	CameraBoom->SetupAttachment(RootComponent);
+	CameraBoom->TargetArmLength = 400.0f; // 默认臂长
+	CameraBoom->bUsePawnControlRotation = true; // 相机臂随控制器旋转
 
-    // 能力系统组件初始化
-    AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
-    AttributeSet = CreateDefaultSubobject<UAnabiosisAttributeSet>(TEXT("AttributeSet"));
+	// 配置跟随相机
+	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
+	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName); // 附加到相机臂末端
+	FollowCamera->bUsePawnControlRotation = false; // 相机本身不随控制器旋转
 
-    // --- 移除武器组件创建 ---
-    // WeaponMeshComponent = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("WeaponMeshComponent"));
-    // ... removed ...
-    // --------------------
+	// 创建 GAS 组件
+	AbilitySystemComponent = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
+	AttributeSet = CreateDefaultSubobject<UAnabiosisAttributeSet>(TEXT("AttributeSet"));
 
-    // 设置数据表和行名默认值
-    AttributeDataTable = nullptr;
-    AttributeDataRowName = NAME_None;
-    WeaponAttributeDataTable = nullptr; // Initialize weapon data table pointer
-    CurrentWeapon = nullptr; // Initialize weapon pointer
-    CurrentClass = EAnabiosisPlayerClass::Warrior; // 设置默认职业
-    LoadedDeathMontage = nullptr; // Initialize death montage pointer
-    bIsDead = false; // Initialize dead state
-    HitReactionMontage = nullptr; // Initialize pointer
+	// 初始化数据表和状态变量
+	AttributeDataTable = nullptr;
+	AttributeDataRowName = NAME_None;
+	WeaponAttributeDataTable = nullptr;
+	CurrentWeapon = nullptr;
+	CurrentClass = EAnabiosisPlayerClass::Warrior; // 默认职业
+	LoadedDeathMontage = nullptr;
+	bIsDead = false;
+	HitReactionMontage = nullptr;
 }
 
 void AAnabiosisOriginCharacter::BeginPlay()
 {
-    Super::BeginPlay();
-    BindAttributeChangeListeners(); // 绑定监听器
-
-    // --- IMPORTANT: Add your data loading logic here ---
-    // Example: Load FAnabiosisAttributeData from a DataTable based on character class/level
-    // UDataTable* AttributeDataTable = ...; // Get your data table asset
-    // FName RowName = ...; // Determine the correct row name for this character
-    // FAnabiosisAttributeData* RowData = AttributeDataTable->FindRow<FAnabiosisAttributeData>(RowName, TEXT("Loading Attribute Data"));
-    // if (RowData)
-    // {
-    //     this->HitReactionMontage = RowData->HitReactionMontage; 
-    //     // Initialize other properties from RowData as needed...
-    // }
-    // else
-    // {
-    //     UE_LOG(LogTemp, Error, TEXT("Could not find attribute data row %s for character %s"), *RowName.ToString(), *GetName());
-    // }
-    // -----------------------------------------------------
+	Super::BeginPlay();
+	// 绑定属性变化监听器，用于处理生命值变化等
+	BindAttributeChangeListeners();
+	// 数据加载应在 PostInitializeComponents 或 PossessedBy 中处理
 }
 
 UAbilitySystemComponent* AAnabiosisOriginCharacter::GetAbilitySystemComponent() const
 {
-    return AbilitySystemComponent;
+	return AbilitySystemComponent;
 }
 
 void AAnabiosisOriginCharacter::PossessedBy(AController* NewController)
 {
-    Super::PossessedBy(NewController);
+	Super::PossessedBy(NewController);
 
-    // 初始化 GAS ActorInfo (Owner 和 Avatar 都是 Character 自身)
-    if (AbilitySystemComponent)
-    {
-        AbilitySystemComponent->InitAbilityActorInfo(this, this); 
-        
-        // 属性应已在 PostInitializeComponents 中初始化
-        // InitializeAttributesFromDataTable(); 
-        
-        GiveDefaultAbilities(); 
-        BindAttributeChangeListeners(); // 在 PossessedBy 中也绑定，确保 ASC 有效
-    }
-    else
-    {
-        UE_LOG(LogTemp, Error, TEXT("AnabiosisOriginCharacter %s: AbilitySystemComponent is NULL during PossessedBy!"), *GetName());
-    }
+	// 当被控制器控制时 (服务器和客户端都会调用)
+	if (AbilitySystemComponent)
+	{
+		// 初始化 ASC 的 ActorInfo
+		AbilitySystemComponent->InitAbilityActorInfo(this, this);
+		// 授予默认能力 (仅服务器)
+		GiveDefaultAbilities();
+		// 绑定属性变化监听器 (客户端也需要监听以更新 UI 等)
+		BindAttributeChangeListeners();
+	}
+	else
+	{
+		UE_LOG(LogTemp, Error, TEXT("AnabiosisOriginCharacter %s: 在 PossessedBy 期间 AbilitySystemComponent 为空！"), *GetName());
+	}
 }
 
 void AAnabiosisOriginCharacter::GiveDefaultAbilities()
 {
-    // 仅在服务端执行
-    if (GetLocalRole() != ROLE_Authority || !AbilitySystemComponent || !AttributeSet)
-    {
-        return;
-    }
+	// 仅在服务器上且 ASC 和属性集有效时执行
+	if (GetLocalRole() != ROLE_Authority || !AbilitySystemComponent || !AttributeSet)
+	{
+		return;
+	}
 
-    for (const TSubclassOf<UGameplayAbility>& Ability : DefaultAbilities)
-    {
-        if (Ability)
-        {
-            AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(Ability, 1, INDEX_NONE, this));
-        }
-    }
+	// 遍历默认能力列表并授予
+	for (const TSubclassOf<UGameplayAbility>& Ability : DefaultAbilities)
+	{
+		if (Ability)
+		{
+			AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(Ability, 1, INDEX_NONE, this));
+		}
+	}
 }
 
 void AAnabiosisOriginCharacter::SetPlayerClass(EAnabiosisPlayerClass NewClass)
 {
-    // 仅在服务端执行
-    if (GetLocalRole() == ROLE_Authority && CurrentClass != NewClass)
-    {
-        CurrentClass = NewClass;
-        UpdateAttributesForClass();
-    }
+	// 仅在服务器上且职业发生变化时执行
+	if (GetLocalRole() == ROLE_Authority && CurrentClass != NewClass)
+	{
+		CurrentClass = NewClass;
+		// 根据新职业更新属性（例如重新从数据表加载）
+		UpdateAttributesForClass();
+	}
 }
 
 void AAnabiosisOriginCharacter::UpdateAttributesForClass()
 {
-    // 重新从数据表加载属性（可能需要根据 NewClass 查找不同的行）
-    // 简化：假设 AttributeDataRowName 会被外部修改或逻辑处理
-    InitializeAttributesFromDataTable();
+	// 重新从数据表加载属性以反映职业变化
+	// 注意：这会覆盖当前的属性值，可能需要更精细的处理方式
+	InitializeAttributesFromDataTable();
 }
 
 void AAnabiosisOriginCharacter::SetCharacterRotationMode(bool bOrientToMovement, bool bUseControllerRotation)
 {
-    if (GetCharacterMovement())
-    {
-        GetCharacterMovement()->bOrientRotationToMovement = bOrientToMovement;
-    }
-    bUseControllerRotationYaw = bUseControllerRotation;
+	// 设置角色移动组件是否朝向移动方向
+	if (GetCharacterMovement())
+	{
+		GetCharacterMovement()->bOrientRotationToMovement = bOrientToMovement;
+	}
+	// 设置角色是否使用控制器的 Yaw 旋转
+	bUseControllerRotationYaw = bUseControllerRotation;
 }
 
-// Correct the class name here
 void AAnabiosisOriginCharacter::SetAttackAbilityTag(const FGameplayTag& NewTag)
 {
-    if (!AbilitySystemComponent) return; // 检查 ASC
+	if (!AbilitySystemComponent) return;
 
-    // 移除旧标签 (如果有效)
-    if (AttackAbilityTag.IsValid())
-    {
-        AbilitySystemComponent->RemoveLooseGameplayTag(AttackAbilityTag);
-    }
-    
-    // 设置并添加新标签 (如果有效)
-    AttackAbilityTag = NewTag;
-    if (AttackAbilityTag.IsValid())
-    {
-        AbilitySystemComponent->AddLooseGameplayTag(AttackAbilityTag);
-    }
+	// 移除旧的攻击标签（如果存在）
+	if (AttackAbilityTag.IsValid())
+	{
+		AbilitySystemComponent->RemoveLooseGameplayTag(AttackAbilityTag);
+	}
+
+	// 设置并添加新的攻击标签
+	AttackAbilityTag = NewTag;
+	if (AttackAbilityTag.IsValid())
+	{
+		AbilitySystemComponent->AddLooseGameplayTag(AttackAbilityTag);
+	}
 }
 
 void AAnabiosisOriginCharacter::RefreshAbilityBindings()
 {
-    // 这个函数的功能可能需要重新审视，它移除了所有标签再加回来，可能不是预期行为
-    // 暂时保留，但标记为可能需要修改
-    if (!AbilitySystemComponent)
-    {
-        return;
-    }
-    
-    FGameplayTagContainer CurrentTags;
-    AbilitySystemComponent->GetOwnedGameplayTags(CurrentTags);
-    
-    // 移除所有 Loose 标签
-    AbilitySystemComponent->RemoveLooseGameplayTags(CurrentTags);
-    
-    // 重新添加 AttackAbilityTag (如果有效)
-    if (AttackAbilityTag.IsValid())
-    {
-        AbilitySystemComponent->AddLooseGameplayTag(AttackAbilityTag);
-    }
-    
-    // 重新添加其他标签 (这部分逻辑可能不正确，因为 CurrentTags 已经被移除了)
-    // for (auto Tag : CurrentTags) 
-    // {
-    //     if (Tag != AttackAbilityTag)
-    //     {
-    //         AbilitySystemComponent->AddLooseGameplayTag(Tag);
-    //     }
-    // }
-    
-    // 刷新能力状态可能不是必要的，取决于具体需求
-    // AbilitySystemComponent->NotifyAbilityEnded(FGameplayAbilitySpecHandle(), nullptr, false);
-    UE_LOG(LogTemp, Warning, TEXT("RefreshAbilityBindings called. Review its logic if issues arise."));
+	// 警告：此函数的目的和实现可能需要重新审视。
+	// 移除并重新添加标签通常不是刷新 GAS 输入绑定的标准方法。
+	// 考虑使用 Enhanced Input 和 GAS 的输入绑定机制。
+	UE_LOG(LogTemp, Warning, TEXT("调用了 RefreshAbilityBindings。请检查其逻辑并考虑替代方案。"));
+	if (!AbilitySystemComponent) return;
+
+	// 示例：重新添加当前的攻击标签
+	if (AttackAbilityTag.IsValid())
+	{
+		AbilitySystemComponent->RemoveLooseGameplayTag(AttackAbilityTag);
+		AbilitySystemComponent->AddLooseGameplayTag(AttackAbilityTag);
+	}
 }
 
 bool AAnabiosisOriginCharacter::IsDead() const
 {
-    return bIsDead;
+	return bIsDead;
 }
 
 void AAnabiosisOriginCharacter::PostInitializeComponents()
 {
-    Super::PostInitializeComponents();
+	Super::PostInitializeComponents();
 
-    // --- 移除武器附加逻辑 ---
-    // if (WeaponMeshComponent && GetMesh() && WeaponSocketName != NAME_None)
-    // ... removed ...
-    // --------------------------
-
-    // 仅在服务端初始化属性
-    if (GetLocalRole() == ROLE_Authority)
-    {
-        InitializeAttributesFromDataTable();
-        // 武器生成移到 InitializeAttributesFromDataTable 之后
-    }
-    // 客户端也需要绑定监听器，以便在本地预测或UI更新时反应
-    // BindAttributeChangeListeners(); // 移至 BeginPlay 和 PossessedBy
+	// 仅在服务器上初始化属性
+	if (GetLocalRole() == ROLE_Authority)
+	{
+		InitializeAttributesFromDataTable();
+	}
+	// 客户端也需要绑定监听器
+	// BindAttributeChangeListeners(); // 已移至 BeginPlay/PossessedBy
 }
 
 void AAnabiosisOriginCharacter::InitializeAttributesFromDataTable()
 {
-    if (!AttributeDataTable)
-    {
-        UE_LOG(LogTemp, Error, TEXT("AnabiosisOriginCharacter %s: AttributeDataTable is not set!"), *GetName());
-        return;
-    }
-    if (AttributeDataRowName == NAME_None)
-    {
-        UE_LOG(LogTemp, Error, TEXT("AnabiosisOriginCharacter %s: AttributeDataRowName is not set!"), *GetName());
-        return;
-    }
-    if (!AttributeSet)
-    {
-        UE_LOG(LogTemp, Error, TEXT("AnabiosisOriginCharacter %s: AttributeSet is NULL!"), *GetName());
-        return;       
-    }
-    UAnabiosisAttributeSet* PlayerAttributeSet = Cast<UAnabiosisAttributeSet>(AttributeSet); 
-    if (!PlayerAttributeSet)
-    {
-        UE_LOG(LogTemp, Error, TEXT("AnabiosisOriginCharacter %s: AttributeSet is not UAnabiosisAttributeSet!"), *GetName()); 
-        return;
-    }
-    if (!AbilitySystemComponent)
-    {
-        UE_LOG(LogTemp, Error, TEXT("AnabiosisOriginCharacter %s: AbilitySystemComponent is NULL!"), *GetName());
-        return;       
-    }
+	// 检查必要的组件和数据表
+	if (!AttributeDataTable || AttributeDataRowName == NAME_None || !AttributeSet || !AbilitySystemComponent)
+	{
+		UE_LOG(LogTemp, Error, TEXT("AnabiosisOriginCharacter %s: 初始化检查失败 (数据表、行名、属性集或 ASC 缺失)。"), *GetName());
+		return;
+	}
+	// 确保属性集是玩家属性集类型
+	UAnabiosisAttributeSet* PlayerAttributeSet = Cast<UAnabiosisAttributeSet>(AttributeSet);
+	if (!PlayerAttributeSet)
+	{
+		UE_LOG(LogTemp, Error, TEXT("AnabiosisOriginCharacter %s: AttributeSet 不是 UAnabiosisAttributeSet！"), *GetName());
+		return;
+	}
 
-    const FString ContextString(TEXT("Loading Player Attributes"));
-    const FAnabiosisAttributeData* Row = AttributeDataTable->FindRow<FAnabiosisAttributeData>(AttributeDataRowName, ContextString);
+	// 从数据表查找行数据
+	const FString ContextString(TEXT("加载玩家属性"));
+	const FAnabiosisAttributeData* Row = AttributeDataTable->FindRow<FAnabiosisAttributeData>(AttributeDataRowName, ContextString);
+	if (!Row)
+	{
+		UE_LOG(LogTemp, Error, TEXT("AnabiosisOriginCharacter %s: 在属性数据表 '%s' 中找不到行 '%s'！"), *GetName(), *AttributeDataTable->GetName(), *AttributeDataRowName.ToString());
+		return;
+	}
 
-    if (!Row)
-    {
-        UE_LOG(LogTemp, Error, TEXT("AnabiosisOriginCharacter %s: Cannot find row '%s' in AttributeDataTable '%s'!"), *GetName(), *AttributeDataRowName.ToString(), *AttributeDataTable->GetName());
-        return;
-    }
+	// 应用属性 (设置基础值和当前值)
+	AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetHealthAttribute(), Row->Health);
+	PlayerAttributeSet->SetHealth(Row->Health);
+	AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetMaxHealthAttribute(), Row->MaxHealth);
+	PlayerAttributeSet->SetMaxHealth(Row->MaxHealth);
+	AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetManaAttribute(), Row->Mana);
+	PlayerAttributeSet->SetMana(Row->Mana);
+	AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetMaxManaAttribute(), Row->MaxMana);
+	PlayerAttributeSet->SetMaxMana(Row->MaxMana);
+	AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetStrengthAttribute(), Row->Strength);
+	PlayerAttributeSet->SetStrength(Row->Strength);
+	AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetAgilityAttribute(), Row->Agility);
+	PlayerAttributeSet->SetAgility(Row->Agility);
+	AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetConstitutionAttribute(), Row->Constitution);
+	PlayerAttributeSet->SetConstitution(Row->Constitution);
+	AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetIntelligenceAttribute(), Row->Intelligence);
+	PlayerAttributeSet->SetIntelligence(Row->Intelligence);
+	AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetAttackPowerAttribute(), Row->AttackPower);
+	PlayerAttributeSet->SetAttackPower(Row->AttackPower);
+	AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetDefenseAttribute(), Row->Defense);
+	PlayerAttributeSet->SetDefense(Row->Defense);
+	AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetCriticalChanceAttribute(), Row->CriticalChance);
+	PlayerAttributeSet->SetCriticalChance(Row->CriticalChance);
+	AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetCriticalMultiplierAttribute(), Row->CriticalMultiplier);
+	PlayerAttributeSet->SetCriticalMultiplier(Row->CriticalMultiplier);
 
-    // 使用 ASC 设置基础值，AttributeSet 设置当前值
-    AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetHealthAttribute(), Row->Health);
-    PlayerAttributeSet->SetHealth(Row->Health);
-    AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetMaxHealthAttribute(), Row->MaxHealth);
-    PlayerAttributeSet->SetMaxHealth(Row->MaxHealth); // 设置 MaxHealth 当前值
-    AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetManaAttribute(), Row->Mana);
-    PlayerAttributeSet->SetMana(Row->Mana);
-    AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetMaxManaAttribute(), Row->MaxMana);
-    PlayerAttributeSet->SetMaxMana(Row->MaxMana); // 设置 MaxMana 当前值
-    AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetStrengthAttribute(), Row->Strength);
-    PlayerAttributeSet->SetStrength(Row->Strength);
-    AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetAgilityAttribute(), Row->Agility);
-    PlayerAttributeSet->SetAgility(Row->Agility);
-    AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetConstitutionAttribute(), Row->Constitution);
-    PlayerAttributeSet->SetConstitution(Row->Constitution);
-    AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetIntelligenceAttribute(), Row->Intelligence);
-    PlayerAttributeSet->SetIntelligence(Row->Intelligence);
-    AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetAttackPowerAttribute(), Row->AttackPower);
-    PlayerAttributeSet->SetAttackPower(Row->AttackPower);
-    AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetDefenseAttribute(), Row->Defense);
-    PlayerAttributeSet->SetDefense(Row->Defense);
-    AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetCriticalChanceAttribute(), Row->CriticalChance);
-    PlayerAttributeSet->SetCriticalChance(Row->CriticalChance);
-    AbilitySystemComponent->SetNumericAttributeBase(PlayerAttributeSet->GetCriticalMultiplierAttribute(), Row->CriticalMultiplier);
-    PlayerAttributeSet->SetCriticalMultiplier(Row->CriticalMultiplier);
+	// 加载动画蒙太奇
+	HitReactionMontage = Row->HitReactionMontage;
+	if (!HitReactionMontage)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("玩家 %s: 在数据表行 '%s' 中未设置 HitReactionMontage。"), *GetName(), *AttributeDataRowName.ToString());
+	}
+	LoadedDeathMontage = Row->DeathMontage;
+	if (!LoadedDeathMontage)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("玩家 %s: 在数据表行 '%s' 中未设置 DeathMontage。"), *GetName(), *AttributeDataRowName.ToString());
+	}
 
-    // --- 加载死亡蒙太奇 ---
-    LoadedDeathMontage = Row->DeathMontage;
-    if (!LoadedDeathMontage)
-    {
-        // 保留警告
-        UE_LOG(LogTemp, Warning, TEXT("Player %s: DeathMontage is not set in DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
-    }
-
-    // 保留初始化完成日志
-    UE_LOG(LogTemp, Log, TEXT("Player %s initialized attributes and montages from DataTable row '%s'."), *GetName(), *AttributeDataRowName.ToString());
-
-    // --- 生成并附加武器 (在属性初始化之后) ---
-    if (GetLocalRole() == ROLE_Authority) // 确保只在服务器生成
-    {
-        SpawnAndAttachWeapon(Row->WeaponDataRowName, Row->WeaponAttachSocketName);
-    }
-    // --------------------------------------
+	// 生成并附加武器 (仅服务器)
+	if (GetLocalRole() == ROLE_Authority)
+	{
+		SpawnAndAttachWeapon(Row->WeaponDataRowName, Row->WeaponAttachSocketName);
+	}
 }
 
 void AAnabiosisOriginCharacter::SpawnAndAttachWeapon(const FName& InWeaponDataRowName, const FName& InAttachSocketName)
 {
-    // 实现与 EnemyBaseCharacter::SpawnAndAttachWeapon 类似
-    if (CurrentWeapon)
-    {
-        CurrentWeapon->Destroy();
-        CurrentWeapon = nullptr;
-    }
-
-    if (!WeaponAttributeDataTable)
-    {
-        UE_LOG(LogTemp, Error, TEXT("%s: WeaponAttributeDataTable is not set! Cannot spawn weapon."), *GetName());
-        return;
-    }
-    if (InWeaponDataRowName == NAME_None)
-    {
-        UE_LOG(LogTemp, Warning, TEXT("%s: WeaponDataRowName is None. No weapon will be spawned."), *GetName());
-        return;
-    }
-     if (InAttachSocketName == NAME_None)
+	// 如果已有武器，先销毁
+	if (CurrentWeapon)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("%s: WeaponAttachSocketName is None. Cannot attach weapon correctly."), *GetName());
+		CurrentWeapon->Destroy();
+		CurrentWeapon = nullptr;
 	}
 
-    const FString ContextString(TEXT("Loading Weapon Attributes"));
-    FWeaponAttributeData* WeaponRow = WeaponAttributeDataTable->FindRow<FWeaponAttributeData>(InWeaponDataRowName, ContextString);
+	// 检查武器数据表和行名
+	if (!WeaponAttributeDataTable || InWeaponDataRowName == NAME_None)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: WeaponAttributeDataTable 未设置或 WeaponDataRowName 为空。无法生成武器。"), *GetName());
+		return;
+	}
+	 // 检查附加插槽名
+	 if (InAttachSocketName == NAME_None)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("%s: WeaponAttachSocketName 为空。无法正确附加武器。"), *GetName());
+	}
 
-    if (!WeaponRow)
-    {
-        UE_LOG(LogTemp, Error, TEXT("%s: Cannot find row '%s' in WeaponAttributeDataTable '%s'!"), *GetName(), *InWeaponDataRowName.ToString(), *WeaponAttributeDataTable->GetName());
-        return;
-    }
+	// 从武器数据表查找行数据
+	const FString ContextString(TEXT("加载武器属性"));
+	FWeaponAttributeData* WeaponRow = WeaponAttributeDataTable->FindRow<FWeaponAttributeData>(InWeaponDataRowName, ContextString);
+	if (!WeaponRow)
+	{
+		UE_LOG(LogTemp, Error, TEXT("%s: 在 WeaponAttributeDataTable '%s' 中找不到行 '%s'！"), *GetName(), *InWeaponDataRowName.ToString(), *WeaponAttributeDataTable->GetName());
+		return;
+	}
 
-    // --- 使用 TSoftClassPtr 加载类 ---
-    if (WeaponRow->WeaponActorClassPtr.IsNull())
-    {
-        UE_LOG(LogTemp, Error, TEXT("%s: WeaponActorClassPtr is not set or is null in WeaponAttributeData row '%s'!"), *GetName(), *InWeaponDataRowName.ToString());
-        return;
-    }
+	// 检查武器 Actor 类指针
+	if (WeaponRow->WeaponActorClassPtr.IsNull())
+	{
+		UE_LOG(LogTemp, Error, TEXT("%s: 在 WeaponAttributeData 行 '%s' 中未设置 WeaponActorClassPtr！"), *GetName(), *InWeaponDataRowName.ToString());
+		return;
+	}
 
-    // 同步加载类资源
-    TSubclassOf<AWeaponBase> LoadedWeaponClass = WeaponRow->WeaponActorClassPtr.LoadSynchronous();
+	// 同步加载武器 Actor 类
+	TSubclassOf<AWeaponBase> LoadedWeaponClass = WeaponRow->WeaponActorClassPtr.LoadSynchronous();
+	if (!LoadedWeaponClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("%s: 从路径 %s 加载 WeaponActorClassPtr 失败 (行 '%s')！"), *GetName(), *WeaponRow->WeaponActorClassPtr.ToString(), *InWeaponDataRowName.ToString());
+		return;
+	}
 
-    if (!LoadedWeaponClass)
-    {
-        UE_LOG(LogTemp, Error, TEXT("%s: Failed to load WeaponActorClassPtr from path %s in row '%s'!"), *GetName(), *WeaponRow->WeaponActorClassPtr.ToString(), *InWeaponDataRowName.ToString());
-        return;
-    }
-    // ---------------------------------
+	UWorld* World = GetWorld();
+	if (!World) return;
 
-    UWorld* World = GetWorld();
-    if (!World) return;
+	// 设置生成参数
+	FActorSpawnParameters SpawnParams;
+	SpawnParams.Owner = this;
+	SpawnParams.Instigator = GetInstigator();
+	SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
 
-    FActorSpawnParameters SpawnParams;
-    SpawnParams.Owner = this;
-    SpawnParams.Instigator = GetInstigator();
-    SpawnParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	// 生成武器 Actor
+	CurrentWeapon = World->SpawnActor<AWeaponBase>(LoadedWeaponClass, GetActorLocation(), GetActorRotation(), SpawnParams);
 
-    // --- 使用加载后的类生成武器 Actor ---
-    CurrentWeapon = World->SpawnActor<AWeaponBase>(LoadedWeaponClass, GetActorLocation(), GetActorRotation(), SpawnParams);
-    // -----------------------------------
+	if (CurrentWeapon)
+	{
+		// 附加武器到骨骼网格插槽
+		if (GetMesh() && InAttachSocketName != NAME_None)
+		{
+			CurrentWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, InAttachSocketName);
+		} else {
+			 UE_LOG(LogTemp, Warning, TEXT("无法附加 %s。骨骼网格无效或 SocketName 为空。"), *CurrentWeapon->GetName());
+		}
 
-    if (CurrentWeapon)
-    {
-        UE_LOG(LogTemp, Log, TEXT("%s spawned weapon: %s (from class %s)"), *GetName(), *CurrentWeapon->GetName(), *LoadedWeaponClass->GetName());
+		// 应用武器授予的属性效果
+		if (WeaponRow->GrantedAttributesEffect && AbilitySystemComponent)
+		{
+			FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
+			EffectContext.AddSourceObject(CurrentWeapon);
+			FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(WeaponRow->GrantedAttributesEffect, 1, EffectContext);
+			if (SpecHandle.IsValid())
+			{
+				AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+			}
+		}
 
-        if (GetMesh() && InAttachSocketName != NAME_None)
-        {
-            CurrentWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, InAttachSocketName);
-             UE_LOG(LogTemp, Log, TEXT("  Attached %s to socket %s"), *CurrentWeapon->GetName(), *InAttachSocketName.ToString());
-        } else {
-             UE_LOG(LogTemp, Warning, TEXT("  Could not attach %s. Mesh invalid or SocketName is None."), *CurrentWeapon->GetName());
-        }
-
-        if (WeaponRow->GrantedAttributesEffect && AbilitySystemComponent)
-        {
-            FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
-            EffectContext.AddSourceObject(CurrentWeapon);
-            FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(WeaponRow->GrantedAttributesEffect, 1, EffectContext);
-            if (SpecHandle.IsValid())
-            {
-                AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-                UE_LOG(LogTemp, Log, TEXT("  Applied GrantedAttributesEffect: %s"), *WeaponRow->GrantedAttributesEffect->GetName());
-            }
-             else
-            {
-                UE_LOG(LogTemp, Warning, TEXT("  Failed to create spec for GrantedAttributesEffect: %s"), *WeaponRow->GrantedAttributesEffect->GetName());
-            }
-        }
-
-        // --- Set Initial Attack Tag ---
-        if (WeaponRow->InitialAttackTag.IsValid())
-        {
-            SetAttackAbilityTag(WeaponRow->InitialAttackTag); // Use the tag from the weapon data
-            UE_LOG(LogTemp, Log, TEXT("  Set AttackAbilityTag to %s from weapon data."), *WeaponRow->InitialAttackTag.ToString());
-        }
-        else
-        {
-            // Optionally clear the tag or set a default if the weapon doesn't specify one
-            // SetAttackAbilityTag(FGameplayTag::EmptyTag);
-             UE_LOG(LogTemp, Log, TEXT("  Weapon data '%s' does not specify an InitialAttackTag."), *InWeaponDataRowName.ToString());
-        }
-        // ----------------------------
-    }
-     else
-    {
-        UE_LOG(LogTemp, Error, TEXT("%s failed to spawn weapon actor from loaded class %s!"), *GetName(), *LoadedWeaponClass->GetName());
-    }
+		// 设置武器定义的初始攻击标签
+		if (WeaponRow->InitialAttackTag.IsValid())
+		{
+			SetAttackAbilityTag(WeaponRow->InitialAttackTag);
+		}
+	}
+	 else
+	{
+		UE_LOG(LogTemp, Error, TEXT("%s 生成武器 Actor 失败 (类 %s)！"), *GetName(), *LoadedWeaponClass->GetName());
+	}
 }
 
 void AAnabiosisOriginCharacter::BindAttributeChangeListeners()
 {
+	// 确保 ASC 和属性集有效
 	if (AbilitySystemComponent && AttributeSet)
 	{
+		// 确保是玩家属性集
 		const UAnabiosisAttributeSet* PlayerAttributeSet = Cast<const UAnabiosisAttributeSet>(AttributeSet);
 		if (PlayerAttributeSet)
 		{
+			// 绑定生命值变化委托
 			AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(PlayerAttributeSet->GetHealthAttribute()).AddUObject(this, &AAnabiosisOriginCharacter::OnHealthAttributeChanged);
-			// UE_LOG(LogTemp, Verbose, TEXT("Bound Health change listener for %s"), *GetName()); // 可以移除或改为更低级别
+			// 可以按需绑定其他属性的委托
 		}
 		else
 		{
-			UE_LOG(LogTemp, Error, TEXT("BindAttributeChangeListeners: AttributeSet is not UAnabiosisAttributeSet for %s"), *GetName());
+			UE_LOG(LogTemp, Error, TEXT("BindAttributeChangeListeners: %s 的 AttributeSet 不是 UAnabiosisAttributeSet"), *GetName());
 		}
 	}
-	// else
-	// {
-		// UE_LOG(LogTemp, Verbose, TEXT("BindAttributeChangeListeners: ASC or AttributeSet is null for %s. Will retry on PossessedBy."), *GetName()); // 可以移除
-	// }
 }
 
 void AAnabiosisOriginCharacter::OnHealthAttributeChanged(const FOnAttributeChangeData& Data)
 {
-	// 保留生命值变化日志，对于调试很有用
-	UE_LOG(LogTemp, Verbose, TEXT("%s Health changed from %.1f to %.1f"), *GetName(), Data.OldValue, Data.NewValue);
-	if (!bIsDead && Data.NewValue <= 0.0f && Data.OldValue > 0.0f) 
+	// 在生命值变化时调用
+	// 如果未死亡且新生命值小于等于 0，则处理死亡
+	if (!bIsDead && Data.NewValue <= 0.0f && Data.OldValue > 0.0f) // 检查 OldValue > 0 避免重复触发
 	{
-		HandleDeath(); // HandleDeath 内部有日志
+		HandleDeath();
 	}
 }
 
 void AAnabiosisOriginCharacter::HandleDeath()
 {
-	if (bIsDead)
-	{
-		return;
-	}
+	if (bIsDead) return; // 防止重复处理
 	bIsDead = true;
-	// 保留死亡处理开始日志
-	UE_LOG(LogTemp, Log, TEXT("AnabiosisOriginCharacter %s is handling death."), *GetName());
 
-	// --- 销毁武器 Actor ---
+	// 销毁武器
 	if (CurrentWeapon)
 	{
 		CurrentWeapon->Destroy();
-		CurrentWeapon = nullptr; // 清除指针
-		UE_LOG(LogTemp, Log, TEXT("  Destroyed CurrentWeapon for %s."), *GetName());
+		CurrentWeapon = nullptr;
 	}
-	// --------------------
 
-	// 停止移动
+	// 停止移动并禁用移动组件
 	if (GetCharacterMovement())
 	{
 		GetCharacterMovement()->StopMovementImmediately();
@@ -521,45 +460,40 @@ void AAnabiosisOriginCharacter::HandleDeath()
 		GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	}
 
-	// 播放死亡蒙太奇
+	// 播放死亡动画
 	UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr;
 	if (AnimInstance && LoadedDeathMontage)
 	{
 		const float PlayRate = 1.0f;
 		AnimInstance->Montage_Play(LoadedDeathMontage, PlayRate);
+		// 绑定动画结束委托
 		FOnMontageEnded MontageEndedDelegate;
 		MontageEndedDelegate.BindUObject(this, &AAnabiosisOriginCharacter::OnDeathMontageEnded);
 		AnimInstance->Montage_SetEndDelegate(MontageEndedDelegate, LoadedDeathMontage);
-		// 可以保留播放蒙太奇的日志，或改为 Verbose
-		UE_LOG(LogTemp, Log, TEXT("  Playing Death Montage: %s"), *LoadedDeathMontage->GetName());
 	}
 	else
 	{
-		// 保留重要警告
-		UE_LOG(LogTemp, Warning, TEXT("  Cannot play death montage: AnimInstance (%p) or LoadedDeathMontage (%p) is invalid."), AnimInstance, LoadedDeathMontage.Get());
-		SetLifeSpan(3.0f); 
+		// 无动画则延迟销毁
+		UE_LOG(LogTemp, Warning, TEXT("无法播放死亡蒙太奇: AnimInstance (%p) 或 LoadedDeathMontage (%p) 无效。将在 3 秒后销毁。"), AnimInstance, LoadedDeathMontage.Get());
+		SetLifeSpan(3.0f);
 	}
 
-	// 可选：取消能力
+	// 取消所有能力
 	if (AbilitySystemComponent)
 	{
 		AbilitySystemComponent->CancelAllAbilities();
 	}
 
-	// 可选：禁用输入
+	// 禁用玩家输入
 	APlayerController* PC = Cast<APlayerController>(GetController());
 	if (PC)
 	{
 		DisableInput(PC);
 	}
-
-	// 可选：触发游戏结束逻辑等
 }
 
 void AAnabiosisOriginCharacter::OnDeathMontageEnded(UAnimMontage* Montage, bool bInterrupted)
 {
-	// 保留蒙太奇结束和销毁日志
-	UE_LOG(LogTemp, Log, TEXT("AnabiosisOriginCharacter %s death montage ended (Interrupted: %s). Destroying Actor."), *GetName(), bInterrupted ? TEXT("Yes") : TEXT("No"));
+	// 死亡动画结束后销毁 Actor
 	Destroy();
-	// 或者触发其他逻辑，例如显示重生菜单
 }

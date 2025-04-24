@@ -95,8 +95,8 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Character|Class")
 	EAnabiosisPlayerClass CurrentClass; // 当前职业
 
-	/** 受击时播放的动画蒙太奇 */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AttackComponent|Animation")
+	/** 受击时播放的动画蒙太奇 (从数据表加载) */
+	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AttackComponent|Animation", meta = (AllowPrivateAccess = "true")) // Changed from EditDefaultsOnly
 	TObjectPtr<UAnimMontage> HitReactionMontage; // 受击反应蒙太奇
 
 	/** 从数据表加载的死亡蒙太奇 */

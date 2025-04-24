@@ -7,6 +7,15 @@
 * 文件名: AiBehaviorComponent.h
 * 功能描述： 定义敌人 AI 行为组件。负责管理敌人的行为模式、状态转换和基本 AI 逻辑（如侦测、追击、攻击）。
 *            该组件从 AEnemyBaseCharacter 获取初始化参数。
+* 结构：
+* - UAiBehaviorComponent：AI 行为组件类。
+*   - InitializeBehavior：根据敌人属性数据初始化组件。
+*   - GetBlackboardComponent：获取关联的黑板组件。
+*   - SetTargetActor：设置当前目标。
+*   - IsInAttackRange, IsInChaseRange, IsInDetectionRange：范围检查函数。
+*   - 内部引用：缓存指向拥有者、属性集、控制器的指针。
+*   - AI 状态：管理当前状态标签和目标。
+*   - AI 参数：存储从数据初始化的行为参数（如范围）。
 */
 
 #pragma once
@@ -36,7 +45,7 @@ public:
 	/**
 	 * @brief 初始化 AI 行为组件。
 	 * @param OwningEnemy 所属的敌人角色。
-	 * @param AttributeData 从数据表加载的属性数据。
+	 * @param AttributeData 从数据表加载的属性数据，用于设置侦测范围等参数。
 	 */
 	virtual void InitializeBehavior(AEnemyBaseCharacter* OwningEnemy, const FEnemyAttributeData& AttributeData);
 
@@ -80,11 +89,11 @@ protected:
 	TObjectPtr<AAIController> OwnerController;
 
 	// --- AI 状态 ---
-	/** 当前 AI 状态标签 */
+	/** 当前 AI 状态标签 (通过 Blackboard 管理，此处可能冗余，待确认) */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI|State")
 	FGameplayTag CurrentAIStateTag;
 
-	/** 当前追踪的目标 Actor */
+	/** 当前追踪的目标 Actor (通过 Blackboard 管理，此处可能冗余，待确认) */
 	UPROPERTY(Transient, VisibleInstanceOnly, Category = "AI|Targeting")
 	TObjectPtr<ACharacter> CurrentTarget;
 
@@ -97,47 +106,19 @@ protected:
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI|Parameters")
 	EEnemyBehaviorType BehaviorType;
 
-	/** 侦测范围的平方，用于距离比较 */
+	/** 侦测范围的平方，用于距离比较，提高效率 */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI|Parameters")
 	float DetectionRangeSquared;
 
-	/** 巡逻半径 */
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI|Parameters")
-	float PatrolRadius;
-
 	/** 追击范围的平方，用于距离比较 */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI|Parameters")
-	float ChaseRangeSquared;
+	float ChaseRangeSquared; // 新增
 
 	/** 攻击范围的平方，用于距离比较 */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI|Parameters")
-	float AttackRangeSquared;
+	float AttackRangeSquared; // 新增
 
-	/** 攻击间隔时间 */
+	/** 巡逻半径 (如果行为是巡逻) */
 	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI|Parameters")
-	float AttackInterval;
-
-	/** 仇恨阈值 (如果使用) */
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI|Parameters")
-	float AggroThreshold;
-
-	// --- 内部状态变量 ---
-	/** 巡逻的原点/家位置 */
-	UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category = "AI|Patrol")
-	FVector PatrolOrigin;
-
-	/** 下一个巡逻目标点 */
-	UPROPERTY(Transient, VisibleInstanceOnly, Category = "AI|Patrol")
-	FVector NextPatrolLocation;
-
-	// --- AI 逻辑函数 ---
-	/** 设置新的 AI 状态 GameplayTag (并更新 Blackboard) */
-	virtual void SetAIStateTag(const FGameplayTag& NewStateTag);
-
-	/** 获取一个随机的巡逻点 */
-	virtual FVector GetRandomPatrolPoint() const;
-
-	/** 当所属 Actor 死亡时调用的处理函数 (绑定到 OnDeathDelegate) */
-	UFUNCTION()
-	virtual void OnOwnerDeath();
+	float PatrolRadius; // 重命名并添加注释
 };

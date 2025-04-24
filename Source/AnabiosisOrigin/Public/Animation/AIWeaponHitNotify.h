@@ -7,7 +7,7 @@
 #include "CoreMinimal.h"
 #include "Animation/AnimNotifies/AnimNotifyState.h"
 #include "Engine/EngineTypes.h" 
-#include "GameplayTagContainer.h" // Include Gameplay Tag Container
+#include "GameplayTagContainer.h" 
 #include "AIWeaponHitNotify.generated.h"
 
 // 日志类别声明
@@ -16,19 +16,18 @@ DECLARE_LOG_CATEGORY_EXTERN(LogAIWeaponHitNotify, Log, All);
 // 前向声明
 class UPrimitiveComponent;
 class UAnimMontage; 
+class ACharacter; 
 
-// 定义 Player 追踪通道 (可以自定义或使用引擎预设，如 ECC_Pawn)
+// 定义 Player 追踪通道
 #define COLLISION_PLAYER ECC_Pawn 
 
 /**
  * @brief AI 武器命中检测通知状态。
  * 
- * 在动画状态的持续时间内，使用武器插槽的起点和终点执行扫描检测（球体或射线）。
+ * 在动画状态的持续时间内，使用武器插槽的起点和终点执行扫描检测。
  * 对首次命中的、属于指定通道（默认为 Player）的玩家 Character Actor 应用伤害、播放受击蒙太奇，并施加 Gameplay Tag。
- * 伤害值基于攻击者（AI）的 AttackPower 属性。
- * 受击蒙太奇基于被击中者（玩家）的配置。
  */
-UCLASS(Blueprintable, meta = (DisplayName = "AI Weapon Hit Notify")) // 使其在蓝图中更易识别
+UCLASS(Blueprintable, meta = (DisplayName = "AI Weapon Hit Notify")) 
 class ANABIOSISORIGIN_API UAIWeaponHitNotify : public UAnimNotifyState
 {
 	GENERATED_BODY()
@@ -44,11 +43,11 @@ public:
 
 protected:
 	// --- Weapon Properties ---
-	/** 武器扫描起点的骨骼/插槽名称 (例如 "weapon_start") */
+	/** 武器扫描起点的骨骼/插槽名称 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AIWeaponHit|Setup")
 	FName WeaponStartSocketName; 
 
-	/** 武器扫描终点的骨骼/插槽名称 (例如 "weapon_end") */
+	/** 武器扫描终点的骨骼/插槽名称 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AIWeaponHit|Setup")
 	FName WeaponEndSocketName; 
 
@@ -57,7 +56,7 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AIWeaponHit|Trace", meta = (ClampMin = "0.0"))
 	float TraceRadius; 
 
-	/** 用于武器命中的追踪通道 (默认为 Pawn 通道，用于检测玩家) */
+	/** 用于武器命中的追踪通道 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AIWeaponHit|Trace")
 	TEnumAsByte<ECollisionChannel> TraceChannel; 
 
@@ -71,29 +70,29 @@ protected:
 	float BaseDamage; 
 
 	// --- Hit Reaction Properties ---
-	/** 命中玩家时播放的受击动画蒙太奇 (可选，如果玩家自身没有配置，则使用此蒙太奇) */
+	/** 命中玩家时播放的受击动画蒙太奇 (可选备用) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AIWeaponHit|Reaction", meta = (DisplayName = "Fallback Player Hit Reaction Montage"))
 	TObjectPtr<UAnimMontage> FallbackPlayerHitReactionMontage; 
 
-	/** 命中时施加给目标的 Gameplay Tag (例如 State.HitReact) */
+	/** 命中时施加给目标的 Gameplay Tag */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AIWeaponHit|Reaction", meta = (DisplayName = "Hit React Tag"))
 	FGameplayTag HitReactTag; 
 
 	// --- Debug Properties ---
-	/** 是否启用调试绘制（显示扫描轨迹、插槽位置和命中点） */
+	/** 是否启用调试绘制 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AIWeaponHit|Debug")
 	bool bDebugTrace; 
 
-	/** 调试信息和绘制的显示时长（秒） */
+	/** 调试信息和绘制的显示时长 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AIWeaponHit|Debug", meta = (EditCondition = "bDebugTrace", ClampMin = "0.0"))
 	float DebugDisplayTime; 
 
 private:
-	/** 在此通知状态实例期间已命中的 Actor 列表，防止重复处理 */
+	/** 在此通知状态实例期间已命中的 Actor 列表 */
 	UPROPERTY(Transient) 
 	TSet<TObjectPtr<AActor>> HitActors; 
 
-	/** 缓存找到的武器组件指针，避免每帧查找 */
+	/** 缓存找到的武器组件指针 */
 	UPROPERTY(Transient) 
 	TObjectPtr<UPrimitiveComponent> CachedWeaponMeshComp; 
 };

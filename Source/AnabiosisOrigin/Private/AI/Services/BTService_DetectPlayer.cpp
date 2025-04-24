@@ -211,15 +211,5 @@ bool UBTService_DetectPlayer::HasLineOfSight(AAIController* OwnerController, con
 
 	bool bHasLoS = OwnerController->LineOfSightTo(TargetActor);
 
-	#if ENABLE_DRAW_DEBUG
-	if (CachedOwnerCharacter)
-	{
-		FVector Start = CachedOwnerCharacter->GetActorLocation();
-		FVector End = TargetActor->GetActorLocation();
-		FColor LineColor = bHasLoS ? FColor::Green : FColor::Red;
-		DrawDebugLine(GetWorld(), Start, End, LineColor, false, Interval, 0, 1.0f);
-	}
-	#endif
-
 	return bHasLoS;
 }
