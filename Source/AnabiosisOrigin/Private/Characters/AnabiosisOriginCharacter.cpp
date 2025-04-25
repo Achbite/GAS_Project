@@ -183,9 +183,6 @@ void AAnabiosisOriginCharacter::SetAttackAbilityTag(const FGameplayTag& NewTag)
 
 void AAnabiosisOriginCharacter::RefreshAbilityBindings()
 {
-	// 此函数的目的不明确且可能存在问题。
-	// 移除并重新添加标签可能不是刷新绑定的预期方式。
-	// 考虑使用输入映射上下文和 GAS 输入绑定以获得更清晰的方法。
 	UE_LOG(LogTemp, Warning, TEXT("调用了 RefreshAbilityBindings。请检查其逻辑并考虑替代方案。"));
 	if (!AbilitySystemComponent) return; // ASC 无效则返回
 	
