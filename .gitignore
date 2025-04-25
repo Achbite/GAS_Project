@@ -1,5 +1,8 @@
 **/.DS_Store
 .vscode/
+.vs/
+*.code-workspace
+*.vsconfig
 Config/
 !Config/DefaultGameplayTags.ini
 Binaries/
@@ -15,6 +18,7 @@ WindowsNoEditor/
 MacNoEditor/
 Android_*/
 IOS/
+
 *.sln
 *.VC.db
 *.xcworkspace
