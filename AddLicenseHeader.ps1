@@ -81,11 +81,13 @@ function Add-LicenseHeaderToFile {
         [string]$CopyrightRegexPattern = 'Copyright \(C\) \d{4}' # Regex to find any year
     )
 
+    $writer = $null # Initialize writer variable outside try
+
     try {
         Write-Host "Processing: $FilePath" -ForegroundColor Cyan
-        # Read only the first few lines for checking to improve performance
-        $linesToCheck = Get-Content -Path $FilePath -Encoding UTF8 -TotalCount 10 -ErrorAction Stop
-        $contentToCheck = $linesToCheck -join "`n" # Join lines for easier regex matching
+        # Read only the first few lines for checking using UTF-8
+        $linesToCheck = Get-Content -Path $FilePath -Encoding UTF8 -TotalCount 10 -ErrorAction Stop 
+        $contentToCheck = $linesToCheck -join "`n" 
 
         # Check if license already exists using regex
         if ($contentToCheck -match $CopyrightRegexPattern) {
@@ -93,16 +95,28 @@ function Add-LicenseHeaderToFile {
             return
         }
 
-        # If no license found, read the full content and prepend
+        # If no license found, read the full content using UTF-8
         $fullContent = Get-Content -Path $FilePath -Raw -Encoding UTF8 -ErrorAction Stop
-        $newContent = $LicenseText + "`r`n" + $fullContent # Use CRLF for consistency, adjust if needed
+        $newContent = $LicenseText + "`r`n" + $fullContent 
+
+        # Write back to file using UTF-8 without BOM via StreamWriter
+        $utf8NoBomEncoding = New-Object System.Text.UTF8Encoding($false) # $false specifies no BOM
         
-        # Write back to file using UTF-8
-        Set-Content -Path $FilePath -Value $newContent -Encoding UTF8 -Force -ErrorAction Stop
-        Write-Host "  License header added." -ForegroundColor Green
+        # Create StreamWriter with the specified encoding
+        $writer = New-Object System.IO.StreamWriter($FilePath, $false, $utf8NoBomEncoding) # $false for overwrite
+        $writer.Write($newContent) 
+        
+        # [System.IO.File]::WriteAllText($FilePath, $newContent, $utf8NoBomEncoding) # Replaced this line
+        Write-Host "  License header added (UTF-8 without BOM)." -ForegroundColor Green
 
     } catch {
         Write-Error "Error processing file '$FilePath': $_"
+    } finally {
+        # Ensure the writer is closed and disposed even if errors occur
+        if ($writer -ne $null) {
+            $writer.Close()
+            $writer.Dispose()
+        }
     }
 }
 
@@ -130,6 +144,5 @@ if (Test-Path $LuaScriptDir -PathType Container) {
 } else {
     Write-Warning "Lua script directory '$LuaScriptDir' not found. Skipping Lua file processing."
 }
-
 
 Write-Host "--- Script Finished ---" -ForegroundColor Yellow
