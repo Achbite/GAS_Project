@@ -56,6 +56,7 @@ UAIWeaponHitNotify::UAIWeaponHitNotify()
 	DebugDisplayTime = 2.0f; // 调试显示时间
 	bApplyDamage = true; // 默认应用伤害
 	BaseDamage = 5.0f; // 基础伤害值
+	bApplyTemporaryDamage = false; // 默认不应用临时伤害
 	FallbackPlayerHitReactionMontage = nullptr; // 备用玩家受击反应蒙太奇
 	HitReactTag = FGameplayTag::RequestGameplayTag(FName("State.HitReact")); // 受击反应标签
 	CachedWeaponMeshComp = nullptr; // 缓存的武器网格组件
@@ -252,27 +253,55 @@ void UAIWeaponHitNotify::NotifyTick(USkeletalMeshComponent * MeshComp, UAnimSequ
 			// -----------------------------
 
 			// --- 应用伤害 ---
-			if (bApplyDamage) // 如果设置了应用伤害
-			{
-				ACharacter* OwnerCharacter = Cast<ACharacter>(OwnerActor); // 获取攻击者 Character
-				AController* OwnerController = OwnerCharacter ? OwnerCharacter->GetController() : nullptr; // 获取攻击者控制器
+			ACharacter* OwnerCharacter = Cast<ACharacter>(OwnerActor); // 获取攻击者 Character
+			AController* OwnerController = OwnerCharacter ? OwnerCharacter->GetController() : nullptr; // 获取攻击者控制器
 
-				float DamageToApply = BaseDamage; // 默认使用基础伤害
-				// 尝试从攻击者 (Enemy) 的属性集获取攻击力
-				AEnemyBaseCharacter* AttackerEnemy = Cast<AEnemyBaseCharacter>(OwnerActor);
-				if(AttackerEnemy)
+			float DamageToApply = BaseDamage; // 默认使用基础伤害
+			// 尝试从攻击者 (Enemy) 的属性集获取攻击力
+			AEnemyBaseCharacter* AttackerEnemy = Cast<AEnemyBaseCharacter>(OwnerActor);
+			if(AttackerEnemy)
+			{
+				UAbilitySystemComponent* AttackerASC = AttackerEnemy->GetAbilitySystemComponent();
+				if (AttackerASC)
 				{
-					UAbilitySystemComponent* AttackerASC = AttackerEnemy->GetAbilitySystemComponent();
-					if (AttackerASC)
+					const UEnemyAttributeSet* AttackerAttributeSet = AttackerASC->GetSet<UEnemyAttributeSet>();
+					if (AttackerAttributeSet)
 					{
-						const UEnemyAttributeSet* AttackerAttributeSet = AttackerASC->GetSet<UEnemyAttributeSet>();
-						if (AttackerAttributeSet)
-						{
-							DamageToApply = AttackerAttributeSet->GetAttackPower(); // 使用敌人属性集中的攻击力
-						}
+						DamageToApply = AttackerAttributeSet->GetAttackPower(); // 使用敌人属性集中的攻击力
 					}
 				}
+			}
 
+			// --- 临时伤害修改开始 ---
+			if (bApplyTemporaryDamage)
+			{
+				if (DamageToApply > 0.f)
+				{
+					UAbilitySystemComponent* TargetPlayerASC = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(HitPlayerCharacter);
+					if (TargetPlayerASC)
+					{
+						UAnabiosisAttributeSet* TargetPlayerAttributeSet = const_cast<UAnabiosisAttributeSet*>(TargetPlayerASC->GetSet<UAnabiosisAttributeSet>());
+						if (TargetPlayerAttributeSet)
+						{
+							const float OldHealth = TargetPlayerAttributeSet->GetHealth();
+							const float NewHealth = OldHealth - DamageToApply;
+							TargetPlayerAttributeSet->SetHealth(NewHealth);
+							UE_LOG(LogAIWeaponHitNotify, Log, TEXT("Temporary damage applied to %s. Old Health: %f, Damage: %f, New Health: %f"), *HitPlayerCharacter->GetName(), OldHealth, DamageToApply, NewHealth);
+						}
+						else
+						{
+							UE_LOG(LogAIWeaponHitNotify, Warning, TEXT("  Cannot apply temporary damage: Target player %s does not have UAnabiosisAttributeSet."), *HitPlayerCharacter->GetName());
+						}
+					}
+					else
+					{
+						UE_LOG(LogAIWeaponHitNotify, Warning, TEXT("  Cannot apply temporary damage: Target player %s does not have AbilitySystemComponent."), *HitPlayerCharacter->GetName());
+					}
+				}
+			}
+			// --- 临时伤害修改结束 ---
+			else if (bApplyDamage) // 如果不应用临时伤害，则检查是否应用常规伤害
+			{
 				// 确保控制器有效且伤害值大于 0
 				if (OwnerController && DamageToApply > 0.f)
 				{

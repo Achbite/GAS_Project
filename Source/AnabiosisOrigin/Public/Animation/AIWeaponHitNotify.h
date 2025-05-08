@@ -69,6 +69,10 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AIWeaponHit|Damage", meta = (EditCondition = "bApplyDamage", ClampMin = "0.0"))
 	float BaseDamage; // 基础伤害
 
+	/** 是否直接应用临时伤害到 Health 属性 (不通过 GameplayEffect 或 TakeDamage) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AIWeaponHit|Damage", meta = (DisplayName = "Apply Temporary Damage Directly"))
+	bool bApplyTemporaryDamage; // 直接应用临时伤害
+
 	// --- Hit Reaction Properties (受击反应属性) ---
 	/** 命中玩家时播放的受击动画蒙太奇 (可选备用) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "AIWeaponHit|Reaction", meta = (DisplayName = "Fallback Player Hit Reaction Montage")) // 备用玩家受击反应蒙太奇
